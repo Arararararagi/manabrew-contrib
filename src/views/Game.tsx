@@ -22,10 +22,13 @@ import { GameFailedScreen } from "@/components/game/GameFailedScreen";
 import { WaitingForPlayerScreen } from "@/components/game/WaitingForPlayerScreen";
 import { DevViewportFrame } from "@/components/dev/DevViewportFrame";
 import { isForgeWasmActive } from "@/lib/forgeWasm";
+import { toast } from "sonner";
 import { ManualTabletopControls } from "@/components/game/ManualTabletopControls";
-import { MiddleBarDock, RightActionPanel } from "@/components/game/panels";
+import { MiddleBarDock, RepeatProgress, RightActionPanel } from "@/components/game/panels";
 import {
   ConcedeGameModal,
+  RepeatRequestModal,
+  RepeatVoteModal,
   RestoreRequestModal,
   RestoreVoteModal,
   EliminatedModal,
@@ -300,6 +303,11 @@ export default function Game({ exitTo }: GameProps = {}) {
     requestRestore,
     voteRestore,
     setSnapshotRecording,
+    startRecording,
+    stopRecording,
+    voteRepeat,
+    recording,
+    repeatVote,
     gameDecks,
   } = useGameStore(
     useShallow((s) => ({
@@ -309,6 +317,11 @@ export default function Game({ exitTo }: GameProps = {}) {
       requestRestore: s.requestRestore,
       voteRestore: s.voteRestore,
       setSnapshotRecording: s.setSnapshotRecording,
+      startRecording: s.startRecording,
+      stopRecording: s.stopRecording,
+      voteRepeat: s.voteRepeat,
+      recording: s.recording,
+      repeatVote: s.repeatVote,
       gameDecks: s.gameDecks,
     })),
   );
@@ -349,6 +362,7 @@ export default function Game({ exitTo }: GameProps = {}) {
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<CheckpointDto | null>(null);
   const closeRestoreModal = useCallback(() => setRestoreTarget(null), []);
+  const [repeatModalLimit, setRepeatModalLimit] = useState<number | null>(null);
   const [combatDetailsOpen, setCombatDetailsOpen] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const handleLoadingComplete = useCallback(() => setIntroDone(true), []);
@@ -1224,6 +1238,28 @@ export default function Game({ exitTo }: GameProps = {}) {
   const ownsEngine = isHost || hostingForgeRoom;
   const gameContinuesWithoutMe = opponents.filter((p) => p.status === "playing").length >= 2;
   const handleConcede = useCallback(() => setConcedeModalOpen(true), []);
+  const canRecord = !!chooseActionInput?.recordable && !isWaitingForResponse && !iAmEliminated;
+  const canRepeat =
+    (chooseActionInput?.repeatLimit ?? 0) > 0 && !isWaitingForResponse && !iAmEliminated;
+  const toggleRecording = useCallback(() => {
+    const send = recording.type === "recording" ? stopRecording : startRecording;
+    console.info(
+      `[repeat] sending ${recording.type === "recording" ? "stopRecording" : "startRecording"}`,
+    );
+    send().catch((error: unknown) =>
+      toast.error(error instanceof Error ? error.message : String(error)),
+    );
+  }, [recording.type, startRecording, stopRecording]);
+  const requestRepeat = useCallback(
+    async (iterations: number) => {
+      if (useGameStore.getState().currentPrompt?.input.type !== "chooseAction") {
+        throw new Error("You no longer have priority.");
+      }
+      console.info(`[repeat] sending repeat x${iterations}`);
+      await respond({ type: "repeat", iterations });
+    },
+    [respond],
+  );
   const handleConcedeConfirm = useCallback(async () => {
     await concede();
     setConcedeModalOpen(false);
@@ -2368,6 +2404,12 @@ export default function Game({ exitTo }: GameProps = {}) {
     onHideModal: hidePromptModal,
     onShowModal: showPromptModal,
   };
+  const openRepeatVote =
+    repeatVote?.status.type === "pending" &&
+    myPlayerSlot &&
+    repeatVote.awaitingPlayerIds.includes(myPlayerSlot)
+      ? repeatVote
+      : null;
   const openRestoreVote =
     gameView.restoreVote?.status.type === "pending" &&
     myPlayerSlot &&
@@ -2585,30 +2627,47 @@ export default function Game({ exitTo }: GameProps = {}) {
       {boardSurfaceEl &&
         createPortal(
           !manualApi && (
-            <MiddleBarDock
-              open={boardMenuOpen}
-              onOpenChange={setBoardMenuOpen}
-              onOpenSettings={() => setGameSettingsOpen(true)}
-              onOpenCombat={() => setCombatDetailsOpen(true)}
-              onConcede={handleConcede}
-              eliminated={iAmEliminated}
-              onLeave={handleLeave}
-              sidePanelCollapsed={isActionPanelCollapsed}
-              onToggleSidePanel={toggleActionPanel}
-              players={gameView.players.map((player) => {
-                const color = playerColorMap.get(player.id) ?? themeColors.playerColors.self;
-                return {
-                  id: player.id,
-                  name: player.name,
-                  color,
-                  textColor: readableTextColor(
+            <>
+              {repeatVote?.status.type === "running" && (
+                <RepeatProgress
+                  vote={repeatVote}
+                  completed={repeatVote.status.completed}
+                  playerName={
+                    playerNameById.get(repeatVote.requestedByPlayerId) ??
+                    repeatVote.requestedByPlayerId
+                  }
+                />
+              )}
+              <MiddleBarDock
+                open={boardMenuOpen}
+                onOpenChange={setBoardMenuOpen}
+                onOpenSettings={() => setGameSettingsOpen(true)}
+                onOpenCombat={() => setCombatDetailsOpen(true)}
+                onConcede={handleConcede}
+                eliminated={iAmEliminated}
+                onLeave={handleLeave}
+                sidePanelCollapsed={isActionPanelCollapsed}
+                onToggleSidePanel={toggleActionPanel}
+                recording={recording.type}
+                canRecord={canRecord}
+                canRepeat={canRepeat}
+                onToggleRecording={toggleRecording}
+                onRepeat={() => setRepeatModalLimit(chooseActionInput?.repeatLimit ?? null)}
+                players={gameView.players.map((player) => {
+                  const color = playerColorMap.get(player.id) ?? themeColors.playerColors.self;
+                  return {
+                    id: player.id,
+                    name: player.name,
                     color,
-                    themeColors.canvas.shadow,
-                    themeColors.textOnTinted,
-                  ),
-                };
-              })}
-            />
+                    textColor: readableTextColor(
+                      color,
+                      themeColors.canvas.shadow,
+                      themeColors.textOnTinted,
+                    ),
+                  };
+                })}
+              />
+            </>
           ),
           boardSurfaceEl,
         )}
@@ -2646,6 +2705,23 @@ export default function Game({ exitTo }: GameProps = {}) {
           endsWithConcede={leaveEndsWithConcede}
           onStay={handleStay}
           onLeave={leaveEndsWithConcede ? handleLeaveConcede : handleLeaveConfirm}
+        />
+      )}
+      {openRepeatVote && (
+        <RepeatVoteModal
+          key={openRepeatVote.voteId}
+          repeatVote={openRepeatVote}
+          resolvePlayerName={(playerId) => playerNameById.get(playerId) ?? playerId}
+          onVote={(accept) => voteRepeat(openRepeatVote.voteId, accept)}
+        />
+      )}
+      {repeatModalLimit !== null && recording.type === "ready" && (
+        <RepeatRequestModal
+          actions={recording.actions}
+          limit={repeatModalLimit}
+          multiplayer={isMultiplayer}
+          onConfirm={requestRepeat}
+          onClose={() => setRepeatModalLimit(null)}
         />
       )}
       {openRestoreVote && (
