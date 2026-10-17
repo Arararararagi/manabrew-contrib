@@ -17,7 +17,6 @@ import java.util.Set;
 
 final class ActionRepeat {
 
-    static final int REPEAT_LIMIT = 50;
     private static final String[] RUNAWAY_COUNTERS = {"cardsCreatedThisTurn", "triggersFiredThisTurn"};
 
     private enum RepeatStatus { PENDING, RUNNING, DECLINED, CANCELLED, APPLIED, FAILED }
@@ -77,31 +76,34 @@ final class ActionRepeat {
     }
 
     static boolean isDirective(final String kind) {
-        return "start_recording".equals(kind) || "stop_recording".equals(kind) || "repeat_vote".equals(kind);
+        return "start_recording".equals(kind) || "stop_recording".equals(kind)
+                || "request_repeat".equals(kind) || "repeat_vote".equals(kind);
     }
 
     boolean replaying() {
         return replay != null;
     }
 
-    boolean handleDirective(final JsonObject action) {
+    void handleDirective(final JsonObject action) {
         final int player = action.get("player").getAsInt();
         switch (action.get("kind").getAsString()) {
             case "start_recording":
-                return startRecording(player);
+                startRecording(player);
+                break;
             case "stop_recording":
-                return stopRecording(player);
+                stopRecording(player);
+                break;
+            case "request_repeat":
+                requestRepeat(player, action.get("iterations").getAsInt());
+                break;
             default:
-                return castRepeatVote(player, action.get("voteId").getAsInt(), action.get("accept").getAsBoolean());
+                castRepeatVote(player, action.get("voteId").getAsInt(), action.get("accept").getAsBoolean());
+                break;
         }
     }
 
-    boolean recordingAvailable(final int seat) {
+    private boolean recordingAvailable(final int seat) {
         return replay == null && (activeRecording == null || recordingSeat == seat) && stackEmpty();
-    }
-
-    int repeatLimit(final int seat) {
-        return repeatAvailable(seat) ? REPEAT_LIMIT : 0;
     }
 
     private boolean repeatAvailable(final int seat) {
@@ -122,24 +124,24 @@ final class ActionRepeat {
         return session.priorityPromptOpen() && session.promptedSeat() == seat && stackEmpty();
     }
 
-    private boolean startRecording(final int seat) {
+    private void startRecording(final int seat) {
         if (!atOwnPriority(seat) || !recordingAvailable(seat)) {
             ActionRecording.log("start refused for seat " + seat + ": prompted=" + session.promptedSeat()
                     + " priorityPrompt=" + session.priorityPromptOpen() + " stack=" + game.getStack().size()
                     + " replaying=" + (replay != null) + " recordingSeat=" + recordingSeat);
             publishRecording(seat, new RecordingStatus_failed(RecordingFailure.NOT_AT_PRIORITY));
-            return false;
+            return;
         }
         ActionRecording.log("start recording for seat " + seat);
         activeRecording = new ActionRecording(game);
         recordingSeat = seat;
+        recordings.remove(seat);
         publishRecording(seat, new RecordingStatus_recording());
-        return recordings.remove(seat) != null;
     }
 
-    private boolean stopRecording(final int seat) {
+    private void stopRecording(final int seat) {
         if (activeRecording == null || recordingSeat != seat) {
-            return false;
+            return;
         }
         final ActionRecording recording = activeRecording;
         activeRecording = null;
@@ -149,18 +151,17 @@ final class ActionRepeat {
                     + " priorityPrompt=" + session.priorityPromptOpen() + " stack=" + game.getStack().size()
                     + "; recording discarded");
             publishRecording(seat, new RecordingStatus_failed(RecordingFailure.NOT_AT_PRIORITY));
-            return false;
+            return;
         }
         if (recording.actions().isEmpty()) {
             ActionRecording.log("stop for seat " + seat + ": no action recorded; recording discarded");
             publishRecording(seat, new RecordingStatus_failed(RecordingFailure.EMPTY));
-            return false;
+            return;
         }
         ActionRecording.log("stop recording for seat " + seat + ": " + recording.size() + " steps, actions "
                 + recording.actions());
         recordings.put(seat, recording);
         publishRecording(seat, new RecordingStatus_ready(recording.actions()));
-        return true;
     }
 
     private void failRecording(final RecordingFailure reason) {
@@ -204,12 +205,12 @@ final class ActionRepeat {
         return answer;
     }
 
-    boolean requestRepeat(final int requester, final int iterations) {
-        if (iterations < 1 || iterations > REPEAT_LIMIT || !repeatAvailable(requester)) {
+    private void requestRepeat(final int requester, final int iterations) {
+        if (iterations < 1 || !atOwnPriority(requester) || !repeatAvailable(requester)) {
             ActionRecording.log("repeat x" + iterations + " refused for seat " + requester + ": recording="
                     + recordings.containsKey(requester) + " replaying=" + (replay != null)
                     + " recordingActive=" + (activeRecording != null) + " stack=" + game.getStack().size());
-            return false;
+            return;
         }
         final Set<Integer> voters = session.voterSeats(requester);
         repeatVote = new RepeatVote(++repeatVoteCount, requester, iterations, recordings.get(requester), voters);
@@ -219,13 +220,12 @@ final class ActionRepeat {
         if (voters.isEmpty()) {
             startReplay();
         }
-        return true;
     }
 
-    private boolean castRepeatVote(final int voter, final int voteId, final boolean accept) {
+    private void castRepeatVote(final int voter, final int voteId, final boolean accept) {
         final RepeatVote vote = repeatVote;
         if (vote == null || vote.status != RepeatStatus.PENDING || vote.id != voteId || !vote.awaiting.remove(voter)) {
-            return false;
+            return;
         }
         final boolean requesterPromptOpen = session.priorityPromptOpen() && session.promptedSeat() == vote.requester;
         ActionRecording.log("seat " + voter + (accept ? " accepted" : " declined") + " repeat vote " + voteId
@@ -234,13 +234,12 @@ final class ActionRepeat {
             vote.status = RepeatStatus.DECLINED;
             vote.decliner = voter;
             publishRepeatVote();
-            return requesterPromptOpen;
+            return;
         }
         publishRepeatVote();
         if (vote.awaiting.isEmpty() && requesterPromptOpen) {
             startReplay();
         }
-        return false;
     }
 
     private void cancelRepeatVote() {

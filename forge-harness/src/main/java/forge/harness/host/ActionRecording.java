@@ -129,9 +129,6 @@ final class ActionRecording {
         final JsonObject answer = output.deepCopy();
         switch (type) {
             case "chooseAction":
-                if ("repeat".equals(kind)) {
-                    return null;
-                }
                 return "act".equals(kind) ? encodeAction(input, output, true) : answer;
             case "payManaCost":
                 return "act".equals(kind) ? encodeAction(input, output, false) : answer;

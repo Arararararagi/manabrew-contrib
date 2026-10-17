@@ -36,6 +36,7 @@ pub enum DirectiveInput {
     SetSnapshotRecording { enabled: bool },
     StartRecording,
     StopRecording,
+    RequestRepeat { iterations: u32 },
     RepeatVote { vote_id: u32, accept: bool },
 }
 
@@ -129,7 +130,6 @@ pub enum ProtocolErrorCode {
     WrongPromptType,
     UnknownActionId,
     CancelNotAllowed,
-    RepeatNotOffered,
     InvalidShape,
 }
 

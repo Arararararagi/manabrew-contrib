@@ -1756,26 +1756,6 @@ fn run_hosted_engine_game_inner(
                                     );
                                     continue;
                                 }
-                                Err(ResponseViolation::RepeatNotOffered) => {
-                                    reject_response(
-                                        &remote_prompt_tx,
-                                        *player_index,
-                                        Some(prompt),
-                                        ProtocolErrorCode::RepeatNotOffered,
-                                        "this prompt does not offer a repeat".to_string(),
-                                    );
-                                    continue;
-                                }
-                                Err(ResponseViolation::InvalidRepeatCount) => {
-                                    reject_response(
-                                        &remote_prompt_tx,
-                                        *player_index,
-                                        Some(prompt),
-                                        ProtocolErrorCode::InvalidShape,
-                                        "the repeat count is outside 1..=repeatLimit".to_string(),
-                                    );
-                                    continue;
-                                }
                             }
                         }
                         decision_received = Some(Instant::now());

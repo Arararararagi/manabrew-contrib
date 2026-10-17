@@ -189,20 +189,6 @@ impl<R: Responder> PromptAgent<R> {
                                 "this prompt is not cancellable".to_string(),
                             );
                         }
-                        Err(ResponseViolation::RepeatNotOffered) => {
-                            self.reject(
-                                &prompt,
-                                ProtocolErrorCode::RepeatNotOffered,
-                                "this prompt does not offer a repeat".to_string(),
-                            );
-                        }
-                        Err(ResponseViolation::InvalidRepeatCount) => {
-                            self.reject(
-                                &prompt,
-                                ProtocolErrorCode::InvalidShape,
-                                "the repeat count is outside 1..=repeatLimit".to_string(),
-                            );
-                        }
                     }
                 }
                 ClientToServerMessage::Directive { directive } => {
@@ -238,6 +224,7 @@ impl<R: Responder> PromptAgent<R> {
             | DirectiveInput::SetSnapshotRecording { .. }
             | DirectiveInput::StartRecording
             | DirectiveInput::StopRecording
+            | DirectiveInput::RequestRepeat { .. }
             | DirectiveInput::RepeatVote { .. } => {}
         }
     }
@@ -657,11 +644,7 @@ impl<R: Responder> PlayerAgent for PromptAgent<R> {
 
         self.send_prompt(
             PromptInput::ChooseAction(
-                manabrew_protocol::prompts::choose_action::ChooseActionInput {
-                    actions,
-                    recordable: false,
-                    repeat_limit: 0,
-                },
+                manabrew_protocol::prompts::choose_action::ChooseActionInput { actions },
             ),
             None,
         );
@@ -681,6 +664,7 @@ impl<R: Responder> PlayerAgent for PromptAgent<R> {
                     | DirectiveInput::SetSnapshotRecording { .. }
                     | DirectiveInput::StartRecording
                     | DirectiveInput::StopRecording
+                    | DirectiveInput::RequestRepeat { .. }
                     | DirectiveInput::RepeatVote { .. },
             } => Self::default_pass(),
         };

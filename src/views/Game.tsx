@@ -305,6 +305,7 @@ export default function Game({ exitTo }: GameProps = {}) {
     setSnapshotRecording,
     startRecording,
     stopRecording,
+    requestRepeat: sendRepeatRequest,
     voteRepeat,
     recording,
     repeatVote,
@@ -319,6 +320,7 @@ export default function Game({ exitTo }: GameProps = {}) {
       setSnapshotRecording: s.setSnapshotRecording,
       startRecording: s.startRecording,
       stopRecording: s.stopRecording,
+      requestRepeat: s.requestRepeat,
       voteRepeat: s.voteRepeat,
       recording: s.recording,
       repeatVote: s.repeatVote,
@@ -362,7 +364,7 @@ export default function Game({ exitTo }: GameProps = {}) {
   const [concedeModalOpen, setConcedeModalOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<CheckpointDto | null>(null);
   const closeRestoreModal = useCallback(() => setRestoreTarget(null), []);
-  const [repeatModalLimit, setRepeatModalLimit] = useState<number | null>(null);
+  const [repeatModalOpen, setRepeatModalOpen] = useState(false);
   const [combatDetailsOpen, setCombatDetailsOpen] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const handleLoadingComplete = useCallback(() => setIntroDone(true), []);
@@ -1238,9 +1240,13 @@ export default function Game({ exitTo }: GameProps = {}) {
   const ownsEngine = isHost || hostingForgeRoom;
   const gameContinuesWithoutMe = opponents.filter((p) => p.status === "playing").length >= 2;
   const handleConcede = useCallback(() => setConcedeModalOpen(true), []);
-  const canRecord = !!chooseActionInput?.recordable && !isWaitingForResponse && !iAmEliminated;
+  const canRecord =
+    !!chooseActionInput && gameView?.stack.length === 0 && !isWaitingForResponse && !iAmEliminated;
   const canRepeat =
-    (chooseActionInput?.repeatLimit ?? 0) > 0 && !isWaitingForResponse && !iAmEliminated;
+    canRecord &&
+    recording.type === "ready" &&
+    repeatVote?.status.type !== "pending" &&
+    repeatVote?.status.type !== "running";
   const toggleRecording = useCallback(() => {
     const send = recording.type === "recording" ? stopRecording : startRecording;
     console.info(
@@ -1256,9 +1262,9 @@ export default function Game({ exitTo }: GameProps = {}) {
         throw new Error("You no longer have priority.");
       }
       console.info(`[repeat] sending repeat x${iterations}`);
-      await respond({ type: "repeat", iterations });
+      await sendRepeatRequest(iterations);
     },
-    [respond],
+    [sendRepeatRequest],
   );
   const handleConcedeConfirm = useCallback(async () => {
     await concede();
@@ -2652,7 +2658,7 @@ export default function Game({ exitTo }: GameProps = {}) {
                 canRecord={canRecord}
                 canRepeat={canRepeat}
                 onToggleRecording={toggleRecording}
-                onRepeat={() => setRepeatModalLimit(chooseActionInput?.repeatLimit ?? null)}
+                onRepeat={() => setRepeatModalOpen(true)}
                 players={gameView.players.map((player) => {
                   const color = playerColorMap.get(player.id) ?? themeColors.playerColors.self;
                   return {
@@ -2715,13 +2721,12 @@ export default function Game({ exitTo }: GameProps = {}) {
           onVote={(accept) => voteRepeat(openRepeatVote.voteId, accept)}
         />
       )}
-      {repeatModalLimit !== null && recording.type === "ready" && (
+      {repeatModalOpen && recording.type === "ready" && (
         <RepeatRequestModal
           actions={recording.actions}
-          limit={repeatModalLimit}
           multiplayer={isMultiplayer}
           onConfirm={requestRepeat}
-          onClose={() => setRepeatModalLimit(null)}
+          onClose={() => setRepeatModalOpen(false)}
         />
       )}
       {openRestoreVote && (

@@ -145,6 +145,7 @@ export interface GameState {
   voteRestore: (voteId: number, accept: boolean) => Promise<void>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
+  requestRepeat: (iterations: number) => Promise<void>;
   voteRepeat: (voteId: number, accept: boolean) => Promise<void>;
   setSnapshotRecording: (enabled: boolean) => Promise<void>;
 }

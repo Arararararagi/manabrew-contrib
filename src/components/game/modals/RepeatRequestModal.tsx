@@ -4,29 +4,27 @@ import { Modal } from "./Modal";
 import { Button } from "@/components/ui/button";
 import { DynamicTextRender } from "@/components/game/DynamicTextRender";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { REPEAT_QUICK_PICKS } from "../game.constants";
+import { REPEAT_LIMIT, REPEAT_QUICK_PICKS } from "../game.constants";
 interface RepeatRequestModalProps {
   actions: string[];
-  limit: number;
   multiplayer: boolean;
   onConfirm: (iterations: number) => Promise<void>;
   onClose: () => void;
 }
 export function RepeatRequestModal({
   actions,
-  limit,
   multiplayer,
   onConfirm,
   onClose,
 }: RepeatRequestModalProps) {
   const id = useId();
-  const [iterations, setIterations] = useState(Math.min(10, limit));
+  const [iterations, setIterations] = useState(10);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const submitting = useRef(false);
-  const clamp = (value: number) => Math.max(1, Math.min(limit, Math.round(value) || 1));
-  const quickPicks = [...new Set([...REPEAT_QUICK_PICKS.filter((n) => n < limit), limit])];
+  const clamp = (value: number) => Math.max(1, Math.min(REPEAT_LIMIT, Math.round(value) || 1));
+  const quickPicks = [...REPEAT_QUICK_PICKS, REPEAT_LIMIT];
   const confirm = async () => {
     if (submitting.current) return;
     submitting.current = true;
@@ -105,7 +103,7 @@ export function RepeatRequestModal({
               variant="outline"
               size="icon"
               aria-label="More times"
-              disabled={pending || iterations >= limit}
+              disabled={pending || iterations >= REPEAT_LIMIT}
               onClick={() => setIterations(clamp(iterations + 1))}
             >
               <Plus className="h-4 w-4" />
@@ -116,7 +114,7 @@ export function RepeatRequestModal({
             type="range"
             aria-label="Times to repeat"
             min={1}
-            max={limit}
+            max={REPEAT_LIMIT}
             value={iterations}
             disabled={pending}
             onChange={(e) => setIterations(clamp(Number(e.target.value)))}
@@ -131,7 +129,7 @@ export function RepeatRequestModal({
                 disabled={pending}
                 onClick={() => setIterations(n)}
               >
-                {n === limit ? `Max ${n}` : n}
+                {n === REPEAT_LIMIT ? `Max ${n}` : n}
               </Button>
             ))}
           </div>

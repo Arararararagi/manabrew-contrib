@@ -780,6 +780,7 @@ export const useGameStore = create<GameState>()(
       },
       startRecording: () => sendRepeatDirective({ type: "startRecording" }),
       stopRecording: () => sendRepeatDirective({ type: "stopRecording" }),
+      requestRepeat: (iterations) => sendRepeatDirective({ type: "requestRepeat", iterations }),
       voteRepeat: (voteId, accept) => sendRepeatDirective({ type: "repeatVote", voteId, accept }),
       voteRestore: async (voteId, accept) => {
         const { myPlayerSlot } = get();

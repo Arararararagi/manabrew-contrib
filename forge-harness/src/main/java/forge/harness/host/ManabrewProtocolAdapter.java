@@ -182,10 +182,6 @@ final class ManabrewProtocolAdapter {
         switch (kind) {
             case "act":
                 return parseActionId(asString(output, "actionId"));
-            case "repeat":
-                flat.addProperty("kind", "repeat");
-                flat.addProperty("iterations", output.get("iterations").getAsInt());
-                return flat;
             case "pass":
                 flat.addProperty("kind", "pass");
                 if (output.has("until") && output.get("until").isJsonObject()) {
@@ -229,6 +225,10 @@ final class ManabrewProtocolAdapter {
                 break;
             case "stopRecording":
                 flat.addProperty("kind", "stop_recording");
+                break;
+            case "requestRepeat":
+                flat.addProperty("kind", "request_repeat");
+                flat.addProperty("iterations", directive.get("iterations").getAsInt());
                 break;
             case "repeatVote":
                 flat.addProperty("kind", "repeat_vote");

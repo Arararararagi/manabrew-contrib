@@ -278,7 +278,6 @@ public final class ManaBrewInteractiveSession {
     }
 
     static final String TRIGGER_ORDER_TITLE = "Order triggered abilities";
-    private static final String REPUBLISH_PROMPT = "republish_prompt";
 
     enum PriorityActionKind { ACTION, PASS, UNDO, RESTORE }
 
@@ -375,10 +374,6 @@ public final class ManaBrewInteractiveSession {
             }
             if (isRestoreDirective(action)) {
                 return new PriorityChoice(PriorityActionKind.RESTORE, null, null, null);
-            }
-            if (action.has("kind") && REPUBLISH_PROMPT.equals(action.get("kind").getAsString())) {
-                publishPriorityPrompt(playerId, actionsForPrompt, untappableCards);
-                continue;
             }
             try {
                 return interpretPriorityAction(action, actionsForPrompt, untappableCards);
@@ -1963,9 +1958,6 @@ public final class ManaBrewInteractiveSession {
                 if (replayed != null) {
                     return ManabrewProtocolAdapter.decodeAction(replayed);
                 }
-                if (priorityPromptOpen) {
-                    return republishPrompt();
-                }
             }
             if (bridge != null && actions.isEmpty() && !closed && !game.isGameOver()) {
                 submitAction(bridge.exchange(promptedPlayerIndex, latestPromptJson));
@@ -2002,18 +1994,8 @@ public final class ManaBrewInteractiveSession {
                 continue;
             }
             if (ActionRepeat.isDirective(kind)) {
-                if (actionRepeat.handleDirective(action) && priorityPromptOpen) {
-                    return republishPrompt();
-                }
+                actionRepeat.handleDirective(action);
                 continue;
-            }
-            if ("repeat".equals(kind)) {
-                ActionRecording.log("repeat answer from seat " + promptedPlayerIndex + ", priority prompt open: "
-                        + priorityPromptOpen);
-                if (priorityPromptOpen
-                        && actionRepeat.requestRepeat(promptedPlayerIndex, action.get("iterations").getAsInt())) {
-                    continue;
-                }
             }
             if (!"concede".equals(kind)) {
                 actionRepeat.onAnswer(submission.response);
@@ -2083,12 +2065,6 @@ public final class ManaBrewInteractiveSession {
     private static boolean isRestoreDirective(final JsonObject action) {
         final String kind = action.has("kind") ? action.get("kind").getAsString() : "";
         return "request_restore".equals(kind) || "restore_vote".equals(kind);
-    }
-
-    private static JsonObject republishPrompt() {
-        final JsonObject republish = new JsonObject();
-        republish.addProperty("kind", REPUBLISH_PROMPT);
-        return republish;
     }
 
     Set<Integer> humanSeats() {
@@ -2325,8 +2301,7 @@ public final class ManaBrewInteractiveSession {
             final String cardId = SnapshotExtractor.javaCardId(card);
             actionsArray.add(new AvailableAction_undoMana("untap:" + cardId, cardId));
         }
-        publishAgentPrompt("player-" + playerId, null, new ChooseActionInput(
-                actionsArray, actionRepeat.recordingAvailable(playerId), actionRepeat.repeatLimit(playerId)));
+        publishAgentPrompt("player-" + playerId, null, new ChooseActionInput(actionsArray));
     }
 
     private static String abilityDescription(final SpellAbility sa, final String fallback) {

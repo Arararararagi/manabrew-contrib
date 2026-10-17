@@ -65,8 +65,9 @@ The client → engine channel carries **two**:
   </Card>
   <Card title="directive" icon="right-arrow">
     A `DirectiveInput` - **out-of-band and fire-and-forget**, never paired with a prompt: `concede`
-    (legal at any time), `startRecording` and `stopRecording` (legal while the `chooseAction` prompt
-    sets `recordable`), and `repeatVote` (answers an open repeat vote).
+    (legal at any time), `startRecording` and `stopRecording` (legal while the player holds priority
+    with an empty stack), `requestRepeat` (asks to repeat the recorded actions `iterations` times,
+    under the same condition), and `repeatVote` (answers an open repeat vote).
   </Card>
 </CardGrid>
 

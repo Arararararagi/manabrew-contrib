@@ -2206,6 +2206,7 @@ fn route_remote_directive(
         | DirectiveInput::RestoreVote { .. }
         | DirectiveInput::StartRecording
         | DirectiveInput::StopRecording
+        | DirectiveInput::RequestRepeat { .. }
         | DirectiveInput::RepeatVote { .. } => send_seat_message(
             engine_session,
             player_index,
@@ -2910,8 +2911,6 @@ mod local_bot_tests {
             source_ability_text: None,
             input: PromptInput::ChooseAction(ChooseActionInput {
                 actions: Vec::new(),
-                recordable: false,
-                repeat_limit: 0,
             }),
         }
     }
