@@ -570,7 +570,39 @@ pub fn card_to_dto(game: &GameState, cid: CardId) -> CardDto {
     card_to_dto_for_viewer(game, cid, None)
 }
 
-fn card_to_dto_for_viewer(game: &GameState, cid: CardId, viewer: Option<PlayerId>) -> CardDto {
+pub(crate) fn card_face_visible_to(card: &Card, viewer: Option<PlayerId>) -> bool {
+    !card.face_down
+        && match card.zone {
+            ZoneType::Hand | ZoneType::ExtraHand | ZoneType::Sideboard => {
+                viewer.is_some_and(|player| player == card.owner || card.may_player_look(player))
+            }
+            zone => zone.is_known() || viewer.is_some_and(|player| card.may_player_look(player)),
+        }
+}
+
+pub(crate) fn card_to_dto_for_viewer(
+    game: &GameState,
+    cid: CardId,
+    viewer: Option<PlayerId>,
+) -> CardDto {
+    card_to_dto_with_face_visibility(
+        game,
+        cid,
+        viewer,
+        card_face_visible_to(game.card(cid), viewer),
+    )
+}
+
+pub(crate) fn revealed_card_to_dto(game: &GameState, cid: CardId, viewer: PlayerId) -> CardDto {
+    card_to_dto_with_face_visibility(game, cid, Some(viewer), !game.card(cid).face_down)
+}
+
+fn card_to_dto_with_face_visibility(
+    game: &GameState,
+    cid: CardId,
+    viewer: Option<PlayerId>,
+    face_visible: bool,
+) -> CardDto {
     let card = game.card(cid);
     let types: Vec<String> = card
         .type_line
@@ -665,6 +697,18 @@ fn card_to_dto_for_viewer(game: &GameState, cid: CardId, viewer: Option<PlayerId
             card.mana_cost.cmc(),
         )
     };
+    let mut keywords = card.keywords.as_string_list();
+    let mut granted_keywords: Vec<String> = Vec::new();
+    for k in card
+        .granted_keywords
+        .iter_strings()
+        .chain(card.pump_keywords.iter_strings())
+    {
+        if !keywords.iter().any(|e| e.eq_ignore_ascii_case(k)) {
+            keywords.push(k.to_string());
+            granted_keywords.push(k.to_string());
+        }
+    }
 
     CardDto {
         id: card_id_str(cid),
@@ -679,6 +723,13 @@ fn card_to_dto_for_viewer(game: &GameState, cid: CardId, viewer: Option<PlayerId
             } else {
                 None
             },
+        },
+        cosmetics: if face_visible {
+            card.cosmetics
+                .clone()
+                .and_then(manabrew_protocol::deck_dto::CardCosmetics::normalize)
+        } else {
+            None
         },
         color,
         mana_cost: mana_cost_str,
@@ -703,21 +754,9 @@ fn card_to_dto_for_viewer(game: &GameState, cid: CardId, viewer: Option<PlayerId
         is_attacking: card.attacking_player.is_some(),
         attacking_player_id: card.attacking_player.map(player_id_str),
         attack_target_id: None,
-        // Merge intrinsic keywords with those granted by continuous effects (layer 6)
-        // and temporary pump keywords (KW$ parameter, until end of turn).
-        keywords: {
-            let mut all_kw = card.keywords.as_string_list();
-            for k in card
-                .granted_keywords
-                .iter_strings()
-                .chain(card.pump_keywords.iter_strings())
-            {
-                if !all_kw.iter().any(|e| e.eq_ignore_ascii_case(k)) {
-                    all_kw.push(k.to_string());
-                }
-            }
-            all_kw
-        },
+        keywords,
+        keyword_labels: None,
+        granted_keywords,
         counters,
         damage: card.damage,
         summoning_sick: card.summoning_sick && !card.has_haste(),
@@ -784,7 +823,7 @@ fn card_to_dto_for_viewer(game: &GameState, cid: CardId, viewer: Option<PlayerId
             .chain(card.granted_keywords.iter_strings())
             .any(|kw| kw.starts_with(manabrew_engine::card::KEYWORD_PLOTTED_PREFIX)),
         is_warp_exiled: card.has_keyword(manabrew_engine::card::KEYWORD_WARP_EXILED),
-        foil: card.paper_foil,
+        foil: face_visible && card.paper_foil,
         // Combat death prediction is computed by the Forge harness only; the
         // Rust engine doesn't surface it yet.
         would_die_in_combat: false,
@@ -985,18 +1024,28 @@ impl GameViewDtoExt for GameViewDto {
             .iter()
             .map(|entry| {
                 let source_card = entry.spell_ability.source.map(|cid| game.card(cid));
+                let visible_source =
+                    source_card.filter(|card| card_face_visible_to(card, Some(human_player)));
                 let identity = CardIdentity {
-                    name: source_card
+                    name: visible_source
                         .map(|c| c.card_name.clone())
-                        .unwrap_or_else(|| "Ability".to_string()),
-                    set_code: source_card
+                        .unwrap_or_else(|| {
+                            if entry.spell_ability.is_spell
+                                && source_card.is_some_and(|card| card.face_down)
+                            {
+                                "Face-down spell".to_string()
+                            } else {
+                                "Ability".to_string()
+                            }
+                        }),
+                    set_code: visible_source
                         .and_then(|c| c.set_code.clone())
                         .unwrap_or_default(),
-                    card_number: source_card
+                    card_number: visible_source
                         .and_then(|c| c.card_number.clone())
                         .unwrap_or_default(),
-                    is_token: source_card.map(|c| c.is_token).unwrap_or(false),
-                    token_script: source_card
+                    is_token: visible_source.is_some_and(|c| c.is_token),
+                    token_script: visible_source
                         .filter(|c| c.is_token)
                         .and_then(|c| c.get_s_var("TokenScript"))
                         .map(|script| manabrew_protocol::TokenScript(script.to_owned())),
@@ -1013,12 +1062,17 @@ impl GameViewDtoExt for GameViewDto {
                         .map(|c| player_id_str(c.owner))
                         .unwrap_or_default(),
                     identity,
+                    foil: visible_source.is_some_and(|card| card.paper_foil),
+                    cosmetics: visible_source
+                        .and_then(|card| card.cosmetics.clone())
+                        .and_then(manabrew_protocol::deck_dto::CardCosmetics::normalize),
                     text: entry.spell_ability.ability_text.clone(),
-                    source_ability_text: stack_source_ability_text(game, &entry.spell_ability),
+                    source_ability_text: visible_source
+                        .and_then(|_| stack_source_ability_text(game, &entry.spell_ability)),
                     is_permanent_spell: entry.is_creature_spell || entry.is_permanent_spell,
                     is_casting: entry.is_pending_cast,
-                    is_double_faced: source_card.map(|c| c.is_double_faced()).unwrap_or(false),
-                    face_index: source_card
+                    is_double_faced: visible_source.is_some_and(|c| c.is_double_faced()),
+                    face_index: visible_source
                         .map(|c| u8::from(c.is_transformed))
                         .unwrap_or_default(),
                     targets: collect_stack_targets(&entry.spell_ability),

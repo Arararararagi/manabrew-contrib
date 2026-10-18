@@ -306,6 +306,13 @@ pub struct SagaChapterDto {
 pub struct CardDto {
     pub id: String,
     pub identity: CardIdentity,
+    #[serde(
+        default,
+        deserialize_with = "crate::deck_dto::CardCosmetics::deserialize_optional",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub cosmetics: Option<crate::deck_dto::CardCosmetics>,
     pub color: String,
     pub mana_cost: String,
     pub cmc: i32,
@@ -345,6 +352,11 @@ pub struct CardDto {
     #[ts(optional)]
     pub attack_target_id: Option<String>,
     pub keywords: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub keyword_labels: Option<BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub granted_keywords: Vec<String>,
     // Keyed by the engine's canonical `CounterType` display form ("P1P1",
     // "Loyalty", one-off counter names uppercase); both producers must match it.
     #[ts(type = "Record<string, number>")]
@@ -408,6 +420,15 @@ pub struct StackObjectDto {
     pub controller_id: String,
     pub owner_id: String,
     pub identity: CardIdentity,
+    #[serde(default)]
+    pub foil: bool,
+    #[serde(
+        default,
+        deserialize_with = "crate::deck_dto::CardCosmetics::deserialize_optional",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub cosmetics: Option<crate::deck_dto::CardCosmetics>,
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -431,6 +452,8 @@ mod stack_object_tests {
             controller_id: "player-0".into(),
             owner_id: "player-1".into(),
             identity: CardIdentity::default(),
+            foil: false,
+            cosmetics: None,
             text: String::new(),
             source_ability_text: Some("When this enters, draw a card.".into()),
             is_permanent_spell: true,

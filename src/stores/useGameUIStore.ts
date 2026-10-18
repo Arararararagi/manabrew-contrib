@@ -10,6 +10,7 @@ export interface HandActionOption {
   kind: "cast" | "ability" | "manual-move" | "manual-tap";
   cardId: string;
   label: string;
+  abilityText?: string;
   actionId?: string;
   mode?: string;
   abilityIndex?: number;

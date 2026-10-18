@@ -1,11 +1,11 @@
 import { Loader2, Minus, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { ScryfallImg } from "@/components/ScryfallImg";
+import { GeneratedCardImage } from "@/components/game/GeneratedCardImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { scryfallDisplayName } from "@/lib/scryfall.utils";
-import { useScryfallStore } from "@/stores/useScryfallStore";
+import { scryfallDisplayName, scryfallToDeckCard } from "@/lib/scryfall.utils";
+import { chooseImageUrisForCard, useScryfallStore } from "@/stores/useScryfallStore";
 import type { ScryfallCard } from "@/types/scryfall";
 interface CollectionQuickAddProps {
   disabled?: boolean;
@@ -174,7 +174,6 @@ export function CollectionQuickAdd({
             Click or press Enter to add one to your collection
           </div>
           {results.map((card, index) => {
-            const thumbnail = card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.small;
             const displayName = scryfallDisplayName(card);
             return (
               <div
@@ -195,11 +194,10 @@ export function CollectionQuickAdd({
                   title={`Add one ${displayName}`}
                   onClick={() => add(card)}
                 >
-                  {thumbnail && (
-                    <ScryfallImg
-                      src={thumbnail}
-                      alt=""
-                      className="h-11 w-8 shrink-0 rounded object-cover object-top"
+                  {chooseImageUrisForCard(card, { frontOnly: true }) && (
+                    <GeneratedCardImage
+                      deckCard={scryfallToDeckCard(card)}
+                      className="h-11 w-8 shrink-0 rounded"
                     />
                   )}
                   <span className="min-w-0 flex-1 truncate text-xs font-medium">{displayName}</span>
