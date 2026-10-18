@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.56.1](https://github.com/witchesofthehill/manabrew/compare/v3.56.0...v3.56.1) (2026-10-17)
+
+### Fixes
+
+* **ui:** restore touch scrolling and search in choice prompts ([#1052](https://github.com/witchesofthehill/manabrew/issues/1052)) ([688d6a6](https://github.com/witchesofthehill/manabrew/commit/688d6a6b1a30769c0e0dda0ce9dad0c78007616d))
+
+## [3.56.0](https://github.com/witchesofthehill/manabrew/compare/v3.55.4...v3.56.0) (2026-10-16)
+
+### Features
+
+* **limited:** add shared pixi workspace and multiplayer matches ([#1029](https://github.com/witchesofthehill/manabrew/issues/1029)) ([b3128f3](https://github.com/witchesofthehill/manabrew/commit/b3128f3b03a8f3d4b1cf517a639b2c44912f6923))
+
+## [3.55.4](https://github.com/witchesofthehill/manabrew/compare/v3.55.3...v3.55.4) (2026-10-14)
+
+### Fixes
+
+* normalization serde ([#1057](https://github.com/witchesofthehill/manabrew/issues/1057)) ([0e2b786](https://github.com/witchesofthehill/manabrew/commit/0e2b7860f9f074ffcf9fe439615b7d3ff84769cf))
+
 ## [3.55.3](https://github.com/witchesofthehill/manabrew/compare/v3.55.2...v3.55.3) (2026-10-10)
 
 ### Fixes
