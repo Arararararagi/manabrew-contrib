@@ -22,7 +22,11 @@ import {
 } from "@/lib/cardRenderQueue";
 import type { CardCanvas } from "@/lib/cardRenderTypes";
 import { registerCardOpticalSource } from "@/lib/cardOpticalLayers";
-import { getCardLiveHighlights, registerCardLiveHighlights } from "@/lib/cardLiveHighlights";
+import {
+  copyCardLiveHighlights,
+  getCardLiveHighlights,
+  registerCardLiveHighlights,
+} from "@/lib/cardLiveHighlights";
 
 export type { CardRenderRequest } from "@/lib/cardRenderSnapshot";
 
@@ -34,11 +38,22 @@ export interface CardRenderOptions {
   rulesText?: boolean;
   priority?: CardRenderPriority;
   standardFrameFallback?: boolean;
+  onCompose?: () => void;
 }
 
-const MAX_FINISHED_CARDS = 128;
-const MAX_FINISHED_BYTES = 96 * 1024 * 1024;
-const finished = new Map<string, { canvas: CardCanvas; bytes: number }>();
+interface FinishedCard {
+  canvas?: CardCanvas;
+  live: WeakRef<CardCanvas>;
+  image?: Blob;
+  decoding?: Promise<CardCanvas>;
+  bytes: number;
+  restore: (canvas: CardCanvas) => void;
+}
+
+const MAX_FINISHED_CARDS = 1024;
+const MAX_FINISHED_BYTES = 256 * 1024 * 1024;
+const FINISHED_IMAGE_QUALITY = 0.95;
+const finished = new Map<string, FinishedCard>();
 const decisions = new WeakMap<CardCanvas, CardRenderDecision>();
 const compositions = new WeakMap<
   PreparedCard,
@@ -90,12 +105,56 @@ function withoutLiveInk<T extends RenderedCardInput>(face: T, colors: Set<string
   };
 }
 
+function evictFinishedCards(): void {
+  while (finished.size > MAX_FINISHED_CARDS || finishedBytes > MAX_FINISHED_BYTES) {
+    const oldest = finished.entries().next().value;
+    if (!oldest) break;
+    finishedBytes -= oldest[1].bytes;
+    finished.delete(oldest[0]);
+    counters.evictions += 1;
+  }
+}
+
+function encodeFinishedCard(canvas: CardCanvas): Promise<Blob> {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (image) => (image ? resolve(image) : reject(new Error("Card encoding failed"))),
+      "image/webp",
+      FINISHED_IMAGE_QUALITY,
+    ),
+  );
+}
+
+async function decodeFinishedCard(card: FinishedCard): Promise<CardCanvas> {
+  const bitmap = await createImageBitmap(card.image!);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Card rendering requires a 2D canvas context");
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  card.restore(canvas);
+  card.live = new WeakRef(canvas);
+  return canvas;
+}
+
+function restoreFinishedCard(card: FinishedCard): Promise<CardCanvas> {
+  const canvas = card.canvas ?? card.live.deref();
+  if (canvas) return Promise.resolve(canvas);
+  card.decoding ??= decodeFinishedCard(card).finally(() => {
+    card.decoding = undefined;
+  });
+  return card.decoding;
+}
+
 function composeCard(
   prepared: PreparedCard,
   rulesText: boolean,
   priority: CardRenderPriority,
   standardFrameFallback: boolean,
   signal?: AbortSignal,
+  onCompose?: () => void,
 ): Promise<CardCanvas> {
   const { cardChange, cardPrinting } = getTheme().gameTheme;
   const optionsKey = JSON.stringify([rulesText, standardFrameFallback, cardChange, cardPrinting]);
@@ -115,12 +174,13 @@ function composeCard(
   }
   const { face, decision, key } = composition;
   const cached = finished.get(key);
-  if (cached) {
+  if (cached && (cached.canvas || cached.image || cached.live.deref())) {
     counters.cacheHits += 1;
     finished.delete(key);
     finished.set(key, cached);
-    return Promise.resolve(cached.canvas);
+    return restoreFinishedCard(cached);
   }
+  onCompose?.();
   return enqueueCardRender(
     key,
     async () => {
@@ -166,21 +226,32 @@ function composeCard(
               region.paper.width * region.paper.height,
             0,
           ) ?? 0;
-        const bytes = (canvas.width * canvas.height + highlightPixels) * 4;
-        if (bytes <= MAX_FINISHED_BYTES) {
-          while (
-            finished.size >= MAX_FINISHED_CARDS ||
-            finishedBytes + bytes > MAX_FINISHED_BYTES
-          ) {
-            const oldest = finished.entries().next().value;
-            if (!oldest) break;
-            finishedBytes -= oldest[1].bytes;
-            finished.delete(oldest[0]);
-            counters.evictions += 1;
-          }
-          finished.set(key, { canvas, bytes });
-          finishedBytes += bytes;
-        }
+        const card: FinishedCard = {
+          canvas,
+          live: new WeakRef(canvas),
+          bytes: 0,
+          restore: (target) => {
+            attachCardRenderGeometry(target, face, prepared.faceIndex);
+            copyCardLiveHighlights(card, target);
+            registerCardOpticalSource(target, face, prepared.artUrls, rulesText);
+            decisions.set(target, decision);
+          },
+        };
+        copyCardLiveHighlights(canvas, card);
+        finished.set(key, card);
+        evictFinishedCards();
+        void encodeFinishedCard(canvas)
+          .then((image) => {
+            if (finished.get(key) !== card) return;
+            card.image = image;
+            card.canvas = undefined;
+            card.bytes = image.size + highlightPixels * 4;
+            finishedBytes += card.bytes;
+            evictFinishedCards();
+          })
+          .catch(() => {
+            if (finished.get(key) === card) finished.delete(key);
+          });
         return canvas;
       } catch (cause) {
         if (cause instanceof CardRenderError) throw cause;
@@ -199,7 +270,12 @@ function composeCard(
 export async function renderCard(
   request: CardRenderRequest,
   signal?: AbortSignal,
-  { rulesText = true, priority = "visible", standardFrameFallback = false }: CardRenderOptions = {},
+  {
+    rulesText = true,
+    priority = "visible",
+    standardFrameFallback = false,
+    onCompose,
+  }: CardRenderOptions = {},
 ): Promise<CardCanvas> {
   signal?.throwIfAborted();
   counters.requests += 1;
@@ -213,7 +289,7 @@ export async function renderCard(
     signal?.throwIfAborted();
     if (useScryfallStore.getState().locale !== locale)
       throw new DOMException("Card language changed during preparation", "AbortError");
-    pending = composeCard(prepared, rulesText, priority, standardFrameFallback, signal);
+    pending = composeCard(prepared, rulesText, priority, standardFrameFallback, signal, onCompose);
   } catch (error) {
     if (!signal?.aborted) counters.failures += 1;
     throw error;
@@ -235,10 +311,12 @@ export async function renderCard(
 export function renderRulesCard(
   request: CardRenderRequest,
   signal?: AbortSignal,
+  onCompose?: () => void,
 ): Promise<CardCanvas> {
   return renderCard(request, signal, {
     rulesText: false,
     priority: "preview",
     standardFrameFallback: true,
+    onCompose,
   });
 }

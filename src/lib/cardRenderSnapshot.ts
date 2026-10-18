@@ -30,6 +30,7 @@ export interface CardRenderRequest {
   card?: CardDto;
   deckCard?: DeckCard;
   faceIndex?: 0 | 1;
+  gameplay?: boolean;
 }
 
 interface LiveCard {
@@ -63,6 +64,7 @@ export interface CardRenderInput {
   readonly faceIndex?: 0 | 1;
   readonly locale: ScryfallLanguage;
   readonly cosmetics?: CardCosmetics;
+  readonly gameplay: boolean;
 }
 
 type CardStatChange = "buffed" | "debuffed" | "added" | "changed";
@@ -186,6 +188,7 @@ export function captureCardInput(request: CardRenderRequest): CardRenderInput {
     faceIndex,
     locale: useScryfallStore.getState().locale,
     cosmetics: normalizeCardCosmetics(card ? card.cosmetics : deckCard?.identity.cosmetics),
+    gameplay: live != null || request.gameplay === true,
   });
 }
 
@@ -420,7 +423,7 @@ function applyLiveFace(
     card,
     hasPrintedBaseline(face, card, info, deckCard, index),
   );
-  return {
+  const live: CardFaceSnapshot = {
     ...face,
     name:
       normalized(card.name) === normalized(printed?.name ?? "") ||
@@ -444,6 +447,24 @@ function applyLiveFace(
     defense: /\bBattle\b/i.test(card.typeLine) ? (card.defense ?? face.defense) : undefined,
     ...(liveChanges ? { liveChanges } : {}),
   };
+  return showsPrintedFace(face, live) ? face : live;
+}
+
+// An unchanged card must resolve to the printed face so deck pre-renders share its cache key.
+function showsPrintedFace(face: CardFaceSnapshot, live: CardFaceSnapshot): boolean {
+  return (
+    !live.liveChanges &&
+    live.name === face.name &&
+    live.type_line_display === face.type_line_display &&
+    normalized(live.type_line) === normalized(face.type_line) &&
+    normalized(live.oracle_text) === normalized(face.oracle_text) &&
+    live.mana_cost === face.mana_cost &&
+    [...(live.colors ?? [])].sort().join() === [...(face.colors ?? [])].sort().join() &&
+    live.power === face.power &&
+    live.toughness === face.toughness &&
+    live.loyalty === face.loyalty &&
+    live.defense === face.defense
+  );
 }
 
 function artUris(
@@ -645,7 +666,7 @@ export async function prepareCard(input: CardRenderInput): Promise<PreparedCard>
       flavorText: printed.flavor_text,
     };
     const wording =
-      !input.card && input.cosmetics?.wording === "original" && id && oracle
+      !input.gameplay && input.cosmetics?.wording === "original" && id && oracle
         ? resolvePrintingWording(
             id,
             {
@@ -697,7 +718,7 @@ export async function prepareCard(input: CardRenderInput): Promise<PreparedCard>
     faceIndex,
     combined,
     locale: input.locale,
-    gameplay: input.card != null,
+    gameplay: input.gameplay,
     printing: Object.freeze(printing),
     cosmetics: input.cosmetics,
   });

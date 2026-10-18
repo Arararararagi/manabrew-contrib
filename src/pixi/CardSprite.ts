@@ -873,28 +873,28 @@ export class CardSprite extends Container {
     const deckCard = hidden ? undefined : this.deckCard();
     const custom = this.isBattlefield && activeStyle !== "realistic" && !hidden;
     const faceIndex = this.previewFace ?? (card.isTransformed ? 1 : 0);
-    const fallback =
-      custom && !this._imageLoaded
-        ? useScryfallStore
-            .getState()
-            .getCardTexture(deckCard!, "full", faceIndex)
-            .then((scan) => {
-              if (
-                !this.destroyed &&
-                generation === this.loadGeneration &&
-                !this._imageLoaded &&
-                scan !== Texture.EMPTY
-              )
-                this.showImage(scan);
-              return scan;
-            })
-            .catch((error: unknown) => {
-              if (!this.destroyed && generation === this.loadGeneration) {
-                console.warn("[pixi] card scan load failed", card.identity.name, error);
-              }
-              return Texture.EMPTY;
-            })
-        : null;
+    let fallback: Promise<Texture> | null = null;
+    const showFallback = () => {
+      fallback = useScryfallStore
+        .getState()
+        .getCardTexture(deckCard!, "full", faceIndex)
+        .then((scan) => {
+          if (
+            !this.destroyed &&
+            generation === this.loadGeneration &&
+            !this._imageLoaded &&
+            scan !== Texture.EMPTY
+          )
+            this.showImage(scan);
+          return scan;
+        })
+        .catch((error: unknown) => {
+          if (!this.destroyed && generation === this.loadGeneration) {
+            console.warn("[pixi] card scan load failed", card.identity.name, error);
+          }
+          return Texture.EMPTY;
+        });
+    };
     let texture: Texture;
     let owned = false;
     let artwork = false;
@@ -905,7 +905,9 @@ export class CardSprite extends Container {
         texture = await useScryfallStore.getState().getCardTexture(deckCard!, "art", faceIndex);
         artwork = true;
       } else if (custom) {
-        const canvas = await renderCard({ card, deckCard, faceIndex }, controller.signal);
+        const canvas = await renderCard({ card, deckCard, faceIndex }, controller.signal, {
+          onCompose: this._imageLoaded ? undefined : showFallback,
+        });
         if (this.destroyed || generation !== this.loadGeneration) return;
         texture = createGeneratedCardTexture(canvas);
         owned = true;
@@ -1096,7 +1098,8 @@ export class CardSprite extends Container {
   private syncHandFaceVisibility(): void {
     const hidden = this.hasHiddenIdentity();
     const ready = !hidden && this.handRulesFace?.imageReady === true;
-    this.printedFaceContainer.visible = hidden || !this.handRulesView || !ready;
+    this.printedFaceContainer.visible =
+      hidden || !this.handRulesView || (!ready && this.handRulesFace?.composing !== false);
     this.printedChromeContainer.visible = this.printedFaceContainer.visible;
     if (this.handRulesFace) {
       this.handRulesFace.visible = !hidden && ready && (this.handRulesView || !this._imageLoaded);

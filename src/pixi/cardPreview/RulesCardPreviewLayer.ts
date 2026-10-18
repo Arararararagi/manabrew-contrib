@@ -203,6 +203,7 @@ export class RulesCardPreviewLayer {
   private completedFaceInputKey: string | null = null;
   private unsubscribeLocale: () => void;
   private renderState: "loading" | "ready" | "error" = "loading";
+  private composingFace = false;
   private preserveArtwork = false;
   private scanOverlay = false;
   private cardBounds = new Rectangle();
@@ -326,6 +327,9 @@ export class RulesCardPreviewLayer {
   }
   get presentationReady(): boolean {
     return this.flip.isReady();
+  }
+  get composing(): boolean {
+    return this.composingFace;
   }
   get liveHighlights(): CardLiveHighlight {
     return this.liveHighlight;
@@ -1647,12 +1651,19 @@ export class RulesCardPreviewLayer {
     const controller = new AbortController();
     this.renderAbort = controller;
     const generation = ++this.artGeneration;
+    this.composingFace = false;
     if (!this.imageReady) {
       this.renderState = "loading";
       this.faceSprite.label = "card-glint-loading";
     }
     try {
-      const canvas = hidden ? null : await renderRulesCard(request, controller.signal);
+      const canvas = hidden
+        ? null
+        : await renderRulesCard(request, controller.signal, () => {
+            if (generation !== this.artGeneration) return;
+            this.composingFace = true;
+            this.callbacks.onRenderRequested();
+          });
       const geometry = canvas ? getCardRenderGeometry(canvas) : undefined;
       const cardBack = hidden ? await loadCardBack() : null;
       if (

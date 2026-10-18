@@ -4,7 +4,7 @@ import { prefetchCards } from "@/stores/useScryfallStore";
 import { asDeckCard, asGameDeckCard, getDeckCardPool } from "@/lib/decks";
 import type { ClientGameView } from "@/stores/gameStore.types";
 import type { Deck, DeckCard } from "@/protocol/deck";
-import { renderRulesCard } from "@/lib/cardRenderer";
+import { renderCard, type CardRenderOptions } from "@/lib/cardRenderer";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
 
 export type GamePrefetchMode = "visible" | "full";
@@ -71,6 +71,75 @@ async function prefetchAllCards(visibleCards: DeckCard[], deckCards: DeckCard[])
   await prefetchCards(deckCards, "art", onSettled);
 }
 
+function manabrewRenderVariants(): CardRenderOptions[] {
+  const preferences = usePreferencesStore.getState();
+  const variants: CardRenderOptions[] = [];
+  if (
+    [
+      preferences.handCardStyle,
+      preferences.stackCardStyle,
+      preferences.promptCardStyle,
+      preferences.inGameCardPreviewStyle,
+    ].includes("rules")
+  ) {
+    variants.push({ rulesText: false, standardFrameFallback: true });
+  }
+  if (preferences.battlefieldCardStyle === "frame") variants.push({});
+  return variants;
+}
+
+async function renderOpeningCards(): Promise<void> {
+  const { gameView, gameDecks } = useGameStore.getState();
+  const cards = (gameView?.players ?? [])
+    .flatMap((player) => [...player.hand, ...player.commandZone])
+    .filter(
+      (card) => !card.isFaceDown && card.identity.name && card.identity.name !== "Hidden Card",
+    );
+  const variants = manabrewRenderVariants();
+  const total = variants.length * cards.length;
+  if (total === 0) return;
+  let loaded = 0;
+  useGameStore.setState({ cardRenderProgress: { loaded, total } });
+  await Promise.allSettled(
+    variants.flatMap((options) =>
+      cards.map((card) =>
+        renderCard(
+          {
+            card,
+            deckCard: asGameDeckCard(gameDecks, card),
+            faceIndex: card.isTransformed ? 1 : 0,
+          },
+          undefined,
+          options,
+        ).finally(() => {
+          loaded += 1;
+          useGameStore.setState({ cardRenderProgress: { loaded, total } });
+        }),
+      ),
+    ),
+  );
+}
+
+async function renderDeckPools(): Promise<void> {
+  const { gameDecks, myPlayerSlot } = useGameStore.getState();
+  const decks = Object.entries(gameDecks)
+    .sort(([a], [b]) => Number(b === myPlayerSlot) - Number(a === myPlayerSlot))
+    .map(([, deck]) => deck);
+  const variants = manabrewRenderVariants();
+  for (const deck of decks) {
+    await Promise.allSettled(
+      variants.flatMap((options) =>
+        getDeckCardPool(deck).map((deckCard) =>
+          renderCard({ deckCard, faceIndex: 0, gameplay: true }, undefined, {
+            ...options,
+            priority: "background",
+          }),
+        ),
+      ),
+    );
+  }
+}
+
 export function useGamePrefetch(mode: GamePrefetchMode): void {
   const gameView = useGameStore((s) => s.gameView);
   const isPrefetchingCards = useGameStore((s) => s.isPrefetchingCards);
@@ -91,25 +160,9 @@ export function useGamePrefetch(mode: GamePrefetchMode): void {
     const deckCards = Object.values(decks).flatMap(getDeckCardPool);
     const visibleCards = cardsToPrefetchImmediately(gameView, decks);
     const finish = async () => {
-      if (usePreferencesStore.getState().handCardStyle === "rules") {
-        const current = useGameStore.getState();
-        const hands = current.gameView?.players.flatMap((player) => player.hand) ?? [];
-        await Promise.allSettled(
-          hands
-            .filter(
-              (card) =>
-                !card.isFaceDown && card.identity.name && card.identity.name !== "Hidden Card",
-            )
-            .map((card) =>
-              renderRulesCard({
-                card,
-                deckCard: asGameDeckCard(current.gameDecks, card),
-                faceIndex: card.isTransformed ? 1 : 0,
-              }),
-            ),
-        );
-      }
+      await renderOpeningCards();
       useGameStore.setState({ isPrefetchingCards: false });
+      void renderDeckPools();
     };
     if (mode === "full") {
       const cap = new Promise<void>((resolve) => setTimeout(resolve, FULL_PREFETCH_WAIT_CAP_MS));
