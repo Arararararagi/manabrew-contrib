@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.57.0](https://github.com/witchesofthehill/manabrew/compare/v3.56.1...v3.57.0) (2026-10-18)
+
+### Features
+
+* **ui:** manabrew card view !!! ([#1059](https://github.com/witchesofthehill/manabrew/issues/1059)) ([00de939](https://github.com/witchesofthehill/manabrew/commit/00de939a14cf6acf9ca2d1d7e7811cdb69091b19))
+
 ## [3.56.1](https://github.com/witchesofthehill/manabrew/compare/v3.56.0...v3.56.1) (2026-10-17)
 
 ### Fixes
