@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.60.2](https://github.com/witchesofthehill/manabrew/compare/v3.60.1...v3.60.2) (2026-10-19)
+
+### Fixes
+
+* **ui:** restore selected settings button styling ([#1077](https://github.com/witchesofthehill/manabrew/issues/1077)) ([2476055](https://github.com/witchesofthehill/manabrew/commit/24760558ee41597a5faa035b6dd975cae37d7238))
+
 ## [3.60.1](https://github.com/witchesofthehill/manabrew/compare/v3.60.0...v3.60.1) (2026-10-19)
 
 ### Fixes
