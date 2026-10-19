@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.60.0](https://github.com/witchesofthehill/manabrew/compare/v3.59.0...v3.60.0) (2026-10-19)
+
+### Features
+
+* **editor:** show localized card names and English details ([#1051](https://github.com/witchesofthehill/manabrew/issues/1051)) ([134ac56](https://github.com/witchesofthehill/manabrew/commit/134ac56843a21a3802dbe0bb13bce10f3d69a407))
+
 ## [3.59.0](https://github.com/witchesofthehill/manabrew/compare/v3.58.0...v3.59.0) (2026-10-18)
 
 ### Features
