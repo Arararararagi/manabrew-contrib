@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.61.1](https://github.com/witchesofthehill/manabrew/compare/v3.61.0...v3.61.1) (2026-10-19)
+
+### Fixes
+
+* restore tablet prompt scrolling and hide private hands ([#1067](https://github.com/witchesofthehill/manabrew/issues/1067)) ([cede8d5](https://github.com/witchesofthehill/manabrew/commit/cede8d5a6e8f03a0e4a12d9f262dbca5f6639086))
+
 ## [3.61.0](https://github.com/witchesofthehill/manabrew/compare/v3.60.2...v3.61.0) (2026-10-19)
 
 ### Features
