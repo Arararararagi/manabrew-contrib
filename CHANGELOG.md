@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.60.1](https://github.com/witchesofthehill/manabrew/compare/v3.60.0...v3.60.1) (2026-10-19)
+
+### Fixes
+
+* **ui:** scope gauntlet returns to the active game ([#1076](https://github.com/witchesofthehill/manabrew/issues/1076)) ([a0aa6c1](https://github.com/witchesofthehill/manabrew/commit/a0aa6c1b3b6d2baef6ac98ca791ecef8fb1b895e))
+
 ## [3.60.0](https://github.com/witchesofthehill/manabrew/compare/v3.59.0...v3.60.0) (2026-10-19)
 
 ### Features
