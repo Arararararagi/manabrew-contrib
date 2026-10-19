@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.61.0](https://github.com/witchesofthehill/manabrew/compare/v3.60.2...v3.61.0) (2026-10-19)
+
+### Features
+
+* **forge:** remember revealed opponent hand cards ([#1078](https://github.com/witchesofthehill/manabrew/issues/1078)) ([8f9775a](https://github.com/witchesofthehill/manabrew/commit/8f9775adba045615a0cbf6e11554a02c447298aa))
+
 ## [3.60.2](https://github.com/witchesofthehill/manabrew/compare/v3.60.1...v3.60.2) (2026-10-19)
 
 ### Fixes
