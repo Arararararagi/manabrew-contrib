@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.63.2](https://github.com/witchesofthehill/manabrew/compare/v3.63.1...v3.63.2) (2026-10-21)
+
+### Fixes
+
+* disable foil shader overload ([#1096](https://github.com/witchesofthehill/manabrew/issues/1096)) ([b1b9d58](https://github.com/witchesofthehill/manabrew/commit/b1b9d5847b2a9aee6e3f744a4a18d305fd394ab6))
+
 ## [3.63.1](https://github.com/witchesofthehill/manabrew/compare/v3.63.0...v3.63.1) (2026-10-21)
 
 ### Fixes
