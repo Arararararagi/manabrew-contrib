@@ -164,3 +164,18 @@ yarn parity:test \
   returned for a pod.
 - The registered smoke pod lives in `regression.json` as
   `fourPlayerCommanderSmoke`.
+
+### Known multiplayer gaps
+
+A pod only stays in parity as long as every deck in it is individually
+parity-stable in 1v1 — the decks that already diverge on their own
+(`kaalia_regression`, `teval`, `ashling`, `worldShaper`, `ramsesCommander`)
+drag a pod apart at the same card. Two engine gaps show up first in pods
+because the Commander decks lean on them:
+
+- A commander in the command zone is not offered as a cast. Java offers the
+  commander's spell ability, so it can be cast from the command zone; the
+  Rust action space only offers cards in hand.
+- An activated ability with an `IsPresent$` filter (Rivendell's scry) is
+  dropped from the action space when the filter matches nothing, while Java
+  keeps the ability in the offered set.
