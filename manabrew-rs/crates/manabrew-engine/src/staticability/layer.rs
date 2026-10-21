@@ -471,6 +471,17 @@ pub fn apply_continuous_effects(game: &mut GameState) {
                 if source_card.zone == ZoneType::Battlefield {
                     apply_to_target(source_id);
                 }
+            } else if sa.ir.affected_defined.as_deref().is_some_and(|defined| {
+                defined.eq_ignore_ascii_case("Equipped")
+                    || defined.eq_ignore_ascii_case("Enchanted")
+            }) {
+                // `AffectedDefined$ Equipped/Enchanted` targets the attached
+                // permanent.
+                if let Some(cid) = source_card.attached_to {
+                    if game.card(cid).zone == ZoneType::Battlefield {
+                        apply_to_target(cid);
+                    }
+                }
             } else if affected_str.eq_ignore_ascii_case("Card.Self")
                 || affected_str.starts_with("Card.Self+")
             {
