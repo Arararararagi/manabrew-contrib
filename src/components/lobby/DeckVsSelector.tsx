@@ -874,7 +874,7 @@ export function DeckVsSelector({
         onCancel={() => setTableDialogOpen(false)}
         centerContent={
           selectedFormat ? (
-            <span className="font-serif text-lg font-light text-foreground/90">
+            <span className="font-serif text-lg font-semibold text-foreground/90">
               {getFormat(selectedFormat)?.name ?? selectedFormat}
             </span>
           ) : undefined
