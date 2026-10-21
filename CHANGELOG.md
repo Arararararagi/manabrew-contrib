@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.62.2](https://github.com/witchesofthehill/manabrew/compare/v3.62.1...v3.62.2) (2026-10-21)
+
+### Fixes
+
+* forge-bot default ([#1087](https://github.com/witchesofthehill/manabrew/issues/1087)) ([6789e0b](https://github.com/witchesofthehill/manabrew/commit/6789e0b6ca17b967b0aeebcf137da53945e7fb3b))
+
 ## [3.62.1](https://github.com/witchesofthehill/manabrew/compare/v3.62.0...v3.62.1) (2026-10-20)
 
 ### Fixes
