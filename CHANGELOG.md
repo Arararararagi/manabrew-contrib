@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.0](https://github.com/witchesofthehill/manabrew/compare/v3.63.2...v3.64.0) (2026-10-21)
+
+### Features
+
+* **ui:** establish manabrew brand identity ([#1084](https://github.com/witchesofthehill/manabrew/issues/1084)) ([4082740](https://github.com/witchesofthehill/manabrew/commit/40827402cdfb4bceb0f1524e3a0810f81cef1a4f))
+
 ## [3.63.2](https://github.com/witchesofthehill/manabrew/compare/v3.63.1...v3.63.2) (2026-10-21)
 
 ### Fixes
