@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-21",
+  "spellbench_revision": "1ea84689a7059e1cd52166805f56c16f5237dcfa",
+  "manabrew_base_revision": "f730d21cbb933d8ddf4f2fec987207fc0a635bec",
+  "working_tree": "uncommitted spike on top of base revision",
+  "forge_revision": "e7d2b93ba9f800a1f5f3a5de91db1aad3ed46831",
+  "node": "v22.22.0",
+  "python": "3.13.3",
+  "engine_command": [
+    "node",
+    "packages/forge-spellbench/cli.mjs",
+    "--experimental",
+    "--engine",
+    "packages/forge-wasm"
+  ],
+  "official_runner": "spellbench.conformance.check_engine (unmodified upstream)",
+  "arena_run": {
+    "status": "refused_before_execution",
+    "reason": "SpellBench disk-reserve guard requires 60 GiB; development filesystem had approximately 6 GiB free. Official conformance games did execute."
+  },
+  "golden_transcripts": "Inspected, not replayed as Forge tests: the upstream fake-engine identities and scenario states are engine-specific.",
+  "scope": "Experimental basic-land and single-target burn catalogs, two external seats, BO1, host_assigned start, mulligan none, declared Forge autopay. Not general SpellBench support.",
+  "format": "forge-spike-bo1",
+  "catalog_tested": ["red-burn"],
+  "execution": "All 21 official checks invoked via the unmodified check_engine API with only=[name], one check at a time. Games check ran two seat-swapped first/uniform games. Current full local suite includes land regressions; historical land conformance is preserved separately.",
+  "checks": [
+    {
+      "name": "hello",
+      "passed": true,
+      "detail": "forge-wasm-spike 0.0.0-dev offers forge-spike-bo1 and 1 catalog decks, and answers a hello of minor 1 with minor 0"
+    },
+    {
+      "name": "protocol_mismatch",
+      "passed": true,
+      "detail": "a hello and a reset of another protocol"
+    },
+    {
+      "name": "malformed_json",
+      "passed": true,
+      "detail": "9 lines that are not strict JSON, the request after the long one, and a line ending in \\r\\n"
+    },
+    {
+      "name": "malformed_request",
+      "passed": true,
+      "detail": "14 malformed requests"
+    },
+    {
+      "name": "malformed_request_non_object",
+      "passed": true,
+      "detail": "4 lines whose top level is not an object"
+    },
+    {
+      "name": "unsupported_rule",
+      "passed": true,
+      "detail": "4 resets with an unsupported rule"
+    },
+    {
+      "name": "game_id_reuse",
+      "passed": true,
+      "detail": "a reset reusing the id of a game ended at step_count 1818"
+    },
+    {
+      "name": "never_cached",
+      "passed": true,
+      "detail": "a reset and a step whose request_id first failed parsing"
+    },
+    {
+      "name": "step_check_order",
+      "passed": true,
+      "detail": "8 steps with two faults each"
+    },
+    {
+      "name": "step_before_reset",
+      "passed": true,
+      "detail": "steps before any game was reset"
+    },
+    {
+      "name": "unsupported_format",
+      "passed": true,
+      "detail": "a reset with the format spellbench-conformance-no-such-format"
+    },
+    {
+      "name": "unsupported_deck",
+      "passed": true,
+      "detail": "3 resets with a deck no engine can play"
+    },
+    {
+      "name": "unsupported_request",
+      "passed": true,
+      "detail": "probe_resample answered unsupported_request and validate_deck unsupported_request, and the game went on"
+    },
+    {
+      "name": "game_already_active",
+      "passed": true,
+      "detail": "a second reset during a game"
+    },
+    {
+      "name": "game_id_mismatch",
+      "passed": true,
+      "detail": "a step naming another game"
+    },
+    {
+      "name": "expected_step_mismatch",
+      "passed": true,
+      "detail": "a step ahead of the pending decision and a stale one"
+    },
+    {
+      "name": "candidate_id_out_of_range",
+      "passed": true,
+      "detail": "candidate_id 1 and 4294967295 among 1 candidates"
+    },
+    {
+      "name": "semantic_echo_mismatch",
+      "passed": true,
+      "detail": "candidate 0 with candidate 1's semantic at step 2"
+    },
+    {
+      "name": "retransmission",
+      "passed": true,
+      "detail": "a reset and a step, each sent again and changed"
+    },
+    {
+      "name": "game_already_terminal",
+      "passed": true,
+      "detail": "a step after a natural terminal at step_count 1818"
+    },
+    {
+      "name": "games",
+      "passed": true,
+      "detail": "played 2 games (2 with red-burn): 2 natural"
+    }
+  ],
+  "local_checks": {
+    "adapter_unit_tests": {
+      "passed": 17,
+      "failed": 0
+    },
+    "adapter_integration_tests": {
+      "passed": 8,
+      "failed": 0,
+      "coverage": "Includes deterministic burn damage win/replay and complete raw-public-API vs adapter priority trace and outcome comparison."
+    },
+    "unchanged_api_regressions_on_rebuilt_wasm": {
+      "passed": 3,
+      "failed": 0
+    },
+    "protocol_stack_serialization": {
+      "passed": 3,
+      "failed": 0
+    },
+    "java_regressions": {
+      "passed": [
+        "ManaBrewEngineAdapterTest",
+        "InteractiveSnapshotExtractorTest",
+        "HarnessPlayPlumbingTest",
+        "ActionSpaceTest",
+        "SessionRandomTest"
+      ],
+      "failed": []
+    },
+    "rust_agent_interface_cargo_check": "passed",
+    "harness_compilation": "passed",
+    "web_image_build": "passed",
+    "prettier": "passed",
+    "git_diff_check": "passed"
+  },
+  "build_artifacts": {
+    "wasm_sha256": "fa480fb6c376a37cd60029b80b015bebd2453b9b157b2abc71bf301a421c642d",
+    "launcher_sha256": "1f5fbbdd6a9fb572e8d0d81e92f3457b9c77d582900b1227b3fd49a151a289a6",
+    "framed_assets_sha256": "b63165d7af76102eb777e43650b9ce1f036a6eb06e8e1345b5ed65a4ddf66258",
+    "assets_provenance": "Reused pre-existing local framed archive. All five admitted card scripts match the pinned Forge source, ignoring boundary whitespace. Normal documented build regenerates the archive.",
+    "binaries_tracked": false
+  },
+  "source_sha256": {
+    "packages/forge-spellbench/candidates.mjs": "2eec6438d50ae826ed0ded28413c249ca190c0998e24df6c014cfff801ee59b8",
+    "packages/forge-spellbench/cli.mjs": "da099a2c6663b1b738967dcba3d12c4a0c81bac1bbcbe2a561b5c89a4bd3ed07",
+    "packages/forge-spellbench/environment.mjs": "af2df7bdacc61e4634bb41624d0430cce2c9f098409c639dc913bdab7e3598b8",
+    "packages/forge-spellbench/game.mjs": "32226c1f9ef31157adf0f0f0890940b1611befe1e580df837768fbf858823e47",
+    "packages/forge-spellbench/observation.mjs": "4731d1fab1da6ff5103cb3b8de3eec697e45682ccc91fdf779ff798ab5a8a2f6",
+    "packages/forge-spellbench/wire.mjs": "e861c6f9970b217e750f6a3228dc3fb90ee530516378f5e812e76526d99a8838",
+    "packages/forge-wasm/engine.js": "1c2d04627a3337ce2e8d104096d35ed77618f05fa7afd43556673f9cba4bce9a",
+    "packages/forge-wasm/node.js": "9816299c21f891b466fd62fe95d6f875191d13c1436e0980c61276a0a0ad9a6e",
+    "packages/forge-wasm/forge-engine.worker.js": "eb1e52cb7201c106e4cc6cd58ccc9272afb9b44212ca3e93cc7d75180a50c8fd",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewEngineAdapter.java": "c374eacf53d3f1b6fef26a974a5871a7a047aab388dd3b51381e733afcd29df6",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewInteractiveController.java": "18c935dcdc6153b6f7789688a5d7622fe17d512cd06307abb5500e9185bd38e6",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewInteractiveSession.java": "e3b4eb5a2f7e6a4fe71e6c0cd4fa334fdc386037eb8489282e9434eb9f63beb0",
+    "forge-harness/src/main/java/forge/harness/host/SessionRandom.java": "0cc06981c15502fba609065ddad4f7f980ae3c062a509abd74c1f87cac564c1d",
+    "forge-harness/src/main/java/forge/harness/host/InteractiveSnapshotExtractor.java": "a512af0ccf0b0bd20cf5ccdb34ffb46208b57a5be38ecfc3b1c870e7052c8eec",
+    "manabrew-rs/crates/manabrew-protocol/src/game/mod.rs": "e5cba33dd0be2eefb0813380a529539939733a52ebeaaefe0f66ad4356cc19dc",
+    "manabrew-rs/crates/manabrew-agent-interface/src/game_view_dto.rs": "4af74b14b15e755659de3dfa1cb0909348eae9ad6b82e568fed8364466509aa0",
+    "tests/forge-wasm/spellbench-adapter.test.mjs": "43b2d1746037747a0a89432d4deb3028cb2a4e0c6c0d86205eb474e505ea147a",
+    "tests/forge-wasm/spellbench-integration.test.mjs": "6d74afeecc6f5115e3fe40dc6e1cea9a48358f5e9e1be1815ed7e8d614fe8058"
+  },
+  "catalog_script_verification": {
+    "res/cardsfolder/m/mountain.txt": {
+      "source_sha256": "d421d9639d7b7f2a8c4ed04fa2fa8526cbc768733a92b0a1a453535ee99a3799",
+      "embedded_sha256": "d421d9639d7b7f2a8c4ed04fa2fa8526cbc768733a92b0a1a453535ee99a3799",
+      "matches_ignoring_boundary_whitespace": true
+    },
+    "res/cardsfolder/f/forest.txt": {
+      "source_sha256": "9a574ea2a8136e588ab77ff8bf260075a94572d8099a7d0d98c62590479aa5a6",
+      "embedded_sha256": "9a574ea2a8136e588ab77ff8bf260075a94572d8099a7d0d98c62590479aa5a6",
+      "matches_ignoring_boundary_whitespace": true
+    },
+    "res/cardsfolder/s/shock.txt": {
+      "source_sha256": "c375b3dbefdbfbc8a719e57c04a15f9e0e0f9af5bd82292511248dec81c496d6",
+      "embedded_sha256": "c375b3dbefdbfbc8a719e57c04a15f9e0e0f9af5bd82292511248dec81c496d6",
+      "matches_ignoring_boundary_whitespace": true
+    },
+    "res/cardsfolder/l/lightning_bolt.txt": {
+      "source_sha256": "330ba48b8090d1b2312f9404d71612cd3bbf49b960974b99ebf5c0804bb4711e",
+      "embedded_sha256": "330ba48b8090d1b2312f9404d71612cd3bbf49b960974b99ebf5c0804bb4711e",
+      "matches_ignoring_boundary_whitespace": true
+    },
+    "res/cardsfolder/l/lava_axe.txt": {
+      "source_sha256": "fe7127f71d1fce8d0a51d0c1b163c2785f93f8eb456e20fdd98f6b2c5b24269f",
+      "embedded_sha256": "fe7127f71d1fce8d0a51d0c1b163c2785f93f8eb456e20fdd98f6b2c5b24269f",
+      "matches_ignoring_boundary_whitespace": true
+    }
+  },
+  "limitations": [
+    "Published Forge-WASM 0.2.0 is incompatible; rebuilt session extensions and optional spellCard projection are required.",
+    "London remains refused because the pinned engine/harness can offer an extra mulligan beyond an empty starting hand.",
+    "No arbitrary decklists, combat, complex target requirements, modes/X, triggered/non-mana activated abilities, replacement choices or random card effects.",
+    "Target slot 0 and null modes/X/divisions rely on audited closed-catalog scripts, not general prompt metadata.",
+    "No general randomness/noninterference or native object-incarnation guarantee outside the admitted catalogs.",
+    "No full repository lint/typecheck gate was run; scoped checks are listed above."
+  ]
+}

@@ -29,11 +29,25 @@ const node = {
       workerData: { workerScript: location },
       argv: ["--serve"],
     });
+    let terminated = false;
     return {
       postMessage: (message) => worker.postMessage(message),
-      terminate: () => void worker.terminate(),
+      terminate: () => {
+        terminated = true;
+        void worker.terminate();
+      },
       onMessage: (handler) => worker.on("message", handler),
-      onError: (handler) => worker.on("error", handler),
+      onError: (handler) => {
+        let reported = false;
+        worker.on("error", (error) => {
+          if (terminated || reported) return;
+          reported = true;
+          handler(error);
+        });
+        worker.on("exit", (code) => {
+          if (!terminated && !reported) handler(new Error(`Forge worker exited (${code}).`));
+        });
+      },
     };
   },
 };

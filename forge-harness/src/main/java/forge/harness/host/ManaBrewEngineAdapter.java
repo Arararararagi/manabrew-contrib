@@ -82,7 +82,9 @@ public final class ManaBrewEngineAdapter {
         Objects.requireNonNull(request, "request");
         requireInitialized();
 
-        final CountingRandom rng = new CountingRandom(request.getSeed(), "hosted");
+        final java.util.Random rng = request.randomSeed == null
+                ? new CountingRandom(request.getSeed(), "hosted")
+                : new SessionRandom(request.randomSeed, "shared:game");
 
         final int playerCount = request.getPlayers().size();
         final GameType gameType = resolveGameType(request);
@@ -130,6 +132,7 @@ public final class ManaBrewEngineAdapter {
         final Match match = new Match(rules, registeredPlayers, "ManaBrew");
         final Game game = match.createGame();
         session.attach(match, game, botSeats, request.isSnapshotRecording());
+        session.configureRandomness(request.randomSeed, request.startingPlayerIndex);
         new CardCosmeticBindings(game, deckEntries, request.getPlayers());
         if (request.checkpointMetrics) {
             session.enableCheckpointMetrics();
@@ -457,6 +460,20 @@ public final class ManaBrewEngineAdapter {
         }
         final StartGameRequest request = new StartGameRequest(
                 gameId, variant, startingLife, seed, snapshotRecording, players);
+        request.randomSeed = optionalString(root, "randomSeed");
+        if (request.randomSeed != null && !request.randomSeed.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("randomSeed must contain 64 lowercase hex characters");
+        }
+        if (root.has("startingPlayerIndex") && !root.get("startingPlayerIndex").isJsonNull()) {
+            final String index = root.get("startingPlayerIndex").getAsString();
+            if (!index.matches("0|[1-9][0-9]*")) {
+                throw new IllegalArgumentException("startingPlayerIndex must be an integer");
+            }
+            request.startingPlayerIndex = Integer.parseInt(index);
+            if (request.startingPlayerIndex >= players.size()) {
+                throw new IllegalArgumentException("startingPlayerIndex out of range");
+            }
+        }
         request.checkpointMetrics = root.has("checkpointMetrics") && root.get("checkpointMetrics").getAsBoolean();
         return request;
     }
@@ -501,6 +518,8 @@ public final class ManaBrewEngineAdapter {
         private final long seed;
         private final boolean snapshotRecording;
         private boolean checkpointMetrics;
+        private String randomSeed;
+        private Integer startingPlayerIndex;
         private final List<PlayerConfig> players;
 
         public StartGameRequest(

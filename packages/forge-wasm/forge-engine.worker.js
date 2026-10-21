@@ -99,6 +99,27 @@ function gameSeed(args) {
   return Number.isInteger(seed) && seed > 0 ? seed % 2147483647 : Date.now() % 2147483647;
 }
 
+function gameOptionsError(args, playerCount, hasForgeAi) {
+  if (
+    args.randomSeed != null &&
+    (typeof args.randomSeed !== "string" || !/^[0-9a-f]{64}$/.test(args.randomSeed))
+  ) {
+    return "randomSeed must contain 64 lowercase hex characters";
+  }
+  if (
+    args.startingPlayerIndex != null &&
+    (!Number.isInteger(args.startingPlayerIndex) ||
+      args.startingPlayerIndex < 0 ||
+      args.startingPlayerIndex >= playerCount)
+  ) {
+    return "startingPlayerIndex out of range";
+  }
+  if (hasForgeAi && (args.randomSeed != null || args.startingPlayerIndex != null)) {
+    return "randomSeed and startingPlayerIndex require externally controlled seats";
+  }
+  return null;
+}
+
 function shareDirectiveLanes(seatCount, localSeat) {
   const buffers = Array.from(
     { length: seatCount },
@@ -121,6 +142,9 @@ async function startGame(requestId, args) {
   if (!humanDeck || !aiDecks.length) {
     return postError(requestId, "start_game requires a deck and opponent deck");
   }
+
+  const optionError = gameOptionsError(args, 1 + aiDecks.length, args.forgeAi === true);
+  if (optionError) return postError(requestId, optionError);
 
   try {
     await boot();
@@ -150,6 +174,8 @@ async function startGame(requestId, args) {
     variant,
     startingLife: (args && args.startingLife) || (commanderGame ? 40 : 20),
     seed: gameSeed(args),
+    randomSeed: args?.randomSeed,
+    startingPlayerIndex: args?.startingPlayerIndex,
     snapshotRecording: !args || args.snapshotRecording !== false,
     players: [
       {
@@ -186,7 +212,10 @@ async function startGame(requestId, args) {
   // Blocks the worker for the whole game, which is the point: the engine parks
   // on Atomics.wait whenever the human seat has to decide.
   try {
-    self.__forgeStartGame(JSON.stringify(request));
+    const result = self.__forgeStartGame(JSON.stringify(request));
+    if (result && JSON.parse(String(result)).error) {
+      throw new Error(JSON.parse(String(result)).error);
+    }
     gameRunning = false;
     postEvent("game:over", {});
   } catch (e) {
@@ -219,6 +248,9 @@ async function startMultiplayerGame(requestId, args) {
     return postError(requestId, "enginePlayerIndex out of range");
   }
 
+  const optionError = gameOptionsError(args, decks.length, forgeAiSeats.size > 0);
+  if (optionError) return postError(requestId, optionError);
+
   try {
     await boot();
   } catch (e) {
@@ -247,6 +279,8 @@ async function startMultiplayerGame(requestId, args) {
     variant,
     startingLife: (args && args.startingLife) || (commanderGame ? 40 : 20),
     seed: gameSeed(args),
+    randomSeed: args?.randomSeed,
+    startingPlayerIndex: args?.startingPlayerIndex,
     snapshotRecording: !args || args.snapshotRecording !== false,
     players: decks.map((deck, index) => ({
       name: playerNames[index] || `Player ${index + 1}`,
@@ -264,7 +298,10 @@ async function startMultiplayerGame(requestId, args) {
   );
 
   try {
-    self.__forgeStartGame(JSON.stringify(request));
+    const result = self.__forgeStartGame(JSON.stringify(request));
+    if (result && JSON.parse(String(result)).error) {
+      throw new Error(JSON.parse(String(result)).error);
+    }
     gameRunning = false;
     postEvent("game:over", {});
   } catch (e) {

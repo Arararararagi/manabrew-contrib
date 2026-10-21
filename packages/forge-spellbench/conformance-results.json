@@ -1,0 +1,195 @@
+{
+  "date": "2026-10-21",
+  "scope": "Experimental basic-land catalog, two external seats, BO1, host_assigned start, mulligan none. Not general SpellBench card/decision support.",
+  "spellbench_revision": "1ea84689a7059e1cd52166805f56c16f5237dcfa",
+  "manabrew_base_revision": "f730d21cbb933d8ddf4f2fec987207fc0a635bec",
+  "working_tree": "uncommitted spike on top of base revision",
+  "forge_revision": "e7d2b93ba9f800a1f5f3a5de91db1aad3ed46831",
+  "node": "v22.22.0",
+  "python": "3.13.3",
+  "engine_command": [
+    "node",
+    "packages/forge-spellbench/cli.mjs",
+    "--experimental",
+    "--engine",
+    "packages/forge-wasm"
+  ],
+  "format": "forge-land-spike-bo1",
+  "catalog": ["mountains", "forests", "mixed-lands"],
+  "official_runner": "spellbench.conformance.check_engine (unmodified upstream)",
+  "execution": "Protocol checks rerun together after capability restriction; games check ran six seat-swapped first/uniform games separately. Every official check is included below.",
+  "checks": [
+    {
+      "name": "hello",
+      "passed": true,
+      "detail": "forge-wasm-land-spike 0.0.0-dev offers forge-land-spike-bo1 and 3 catalog decks, and answers a hello of minor 1 with minor 0"
+    },
+    {
+      "name": "protocol_mismatch",
+      "passed": true,
+      "detail": "a hello and a reset of another protocol"
+    },
+    {
+      "name": "malformed_json",
+      "passed": true,
+      "detail": "9 lines that are not strict JSON, the request after the long one, and a line ending in \\r\\n"
+    },
+    {
+      "name": "malformed_request",
+      "passed": true,
+      "detail": "14 malformed requests"
+    },
+    {
+      "name": "malformed_request_non_object",
+      "passed": true,
+      "detail": "4 lines whose top level is not an object"
+    },
+    {
+      "name": "unsupported_rule",
+      "passed": true,
+      "detail": "4 resets with an unsupported rule"
+    },
+    {
+      "name": "game_id_reuse",
+      "passed": true,
+      "detail": "a reset reusing the id of a game ended at step_count 1818"
+    },
+    {
+      "name": "never_cached",
+      "passed": true,
+      "detail": "a reset and a step whose request_id first failed parsing"
+    },
+    {
+      "name": "step_check_order",
+      "passed": true,
+      "detail": "8 steps with two faults each"
+    },
+    {
+      "name": "step_before_reset",
+      "passed": true,
+      "detail": "steps before any game was reset"
+    },
+    {
+      "name": "unsupported_format",
+      "passed": true,
+      "detail": "a reset with the format spellbench-conformance-no-such-format"
+    },
+    {
+      "name": "unsupported_deck",
+      "passed": true,
+      "detail": "3 resets with a deck no engine can play"
+    },
+    {
+      "name": "unsupported_request",
+      "passed": true,
+      "detail": "probe_resample answered unsupported_request and validate_deck unsupported_request, and the game went on"
+    },
+    {
+      "name": "game_already_active",
+      "passed": true,
+      "detail": "a second reset during a game"
+    },
+    {
+      "name": "game_id_mismatch",
+      "passed": true,
+      "detail": "a step naming another game"
+    },
+    {
+      "name": "expected_step_mismatch",
+      "passed": true,
+      "detail": "a step ahead of the pending decision and a stale one"
+    },
+    {
+      "name": "candidate_id_out_of_range",
+      "passed": true,
+      "detail": "candidate_id 1 and 4294967295 among 1 candidates"
+    },
+    {
+      "name": "semantic_echo_mismatch",
+      "passed": true,
+      "detail": "candidate 0 with candidate 1's semantic at step 2"
+    },
+    {
+      "name": "retransmission",
+      "passed": true,
+      "detail": "a reset and a step, each sent again and changed"
+    },
+    {
+      "name": "game_already_terminal",
+      "passed": true,
+      "detail": "a step after a natural terminal at step_count 1818"
+    },
+    {
+      "name": "games",
+      "passed": true,
+      "detail": "played 6 games (2 with mountains, 2 with forests, 2 with mixed-lands): 6 natural"
+    }
+  ],
+  "local_checks": {
+    "adapter_unit_tests": {
+      "passed": 13,
+      "failed": 0
+    },
+    "adapter_integration_tests": {
+      "passed": 6,
+      "failed": 0,
+      "execution": "Five-test suite plus added EOF-during-startup test; final cleanup subset passed both tests."
+    },
+    "worker_configuration_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "unchanged_api_regressions_on_rebuilt_wasm": {
+      "passed": 3,
+      "failed": 0
+    },
+    "java_regressions": {
+      "passed": [
+        "ManaBrewEngineAdapterTest",
+        "InteractiveSnapshotExtractorTest",
+        "HarnessPlayPlumbingTest",
+        "ActionSpaceTest",
+        "SessionRandomTest"
+      ],
+      "failed": []
+    },
+    "harness_compilation": "passed",
+    "web_image_build": "passed",
+    "prettier": "passed",
+    "git_diff_check": "passed"
+  },
+  "build_artifacts": {
+    "wasm_sha256": "72234d6a1aaacb3c0810cc9ca7b8cca50156dd4f00ee4595223683214927ee4b",
+    "launcher_sha256": "1f5fbbdd6a9fb572e8d0d81e92f3457b9c77d582900b1227b3fd49a151a289a6",
+    "framed_assets_sha256": "b63165d7af76102eb777e43650b9ce1f036a6eb06e8e1345b5ed65a4ddf66258",
+    "assets_provenance": "Reused pre-existing local framed archive for this build. Normal documented build regenerates assets from the pinned Forge source. Catalog limited to Mountain and Forest.",
+    "binaries_tracked": false
+  },
+  "source_sha256": {
+    "packages/forge-spellbench/candidates.mjs": "ebddae95e6866f85c1a5aa591618e8ca1ed7b88f78c55b8d19d4c86542e6bae8",
+    "packages/forge-spellbench/cli.mjs": "4efc103bc9751fbf588a71fb72c804e801d0676fc856831b7dba0a576013ede6",
+    "packages/forge-spellbench/environment.mjs": "823fc24a0c4aaa55e44839b7007db79f6cb537081daf46eccfd0f0ca06170df3",
+    "packages/forge-spellbench/game.mjs": "f54235ead4599ab6b7e5ecaf28ae722e4697cff0a700349f5d26d88c3259fbc5",
+    "packages/forge-spellbench/observation.mjs": "b65e6d9ac646346f54d6cf17d91dad76e7bc0d55a9bf941c39036add634ecbb2",
+    "packages/forge-spellbench/wire.mjs": "e861c6f9970b217e750f6a3228dc3fb90ee530516378f5e812e76526d99a8838",
+    "packages/forge-wasm/engine.js": "1c2d04627a3337ce2e8d104096d35ed77618f05fa7afd43556673f9cba4bce9a",
+    "packages/forge-wasm/node.js": "9816299c21f891b466fd62fe95d6f875191d13c1436e0980c61276a0a0ad9a6e",
+    "packages/forge-wasm/forge-engine.worker.js": "eb1e52cb7201c106e4cc6cd58ccc9272afb9b44212ca3e93cc7d75180a50c8fd",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewEngineAdapter.java": "c374eacf53d3f1b6fef26a974a5871a7a047aab388dd3b51381e733afcd29df6",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewInteractiveController.java": "18c935dcdc6153b6f7789688a5d7622fe17d512cd06307abb5500e9185bd38e6",
+    "forge-harness/src/main/java/forge/harness/host/ManaBrewInteractiveSession.java": "e3b4eb5a2f7e6a4fe71e6c0cd4fa334fdc386037eb8489282e9434eb9f63beb0",
+    "forge-harness/src/main/java/forge/harness/host/SessionRandom.java": "0cc06981c15502fba609065ddad4f7f980ae3c062a509abd74c1f87cac564c1d"
+  },
+  "arena_run": {
+    "status": "refused_before_execution",
+    "reason": "SpellBench disk-reserve guard requires 60 GiB; development filesystem had approximately 6 GiB free. Official conformance games did execute."
+  },
+  "golden_transcripts": "Inspected, not replayed as Forge tests: the upstream fake-engine identities and scenario states are engine-specific.",
+  "limitations": [
+    "Published Forge-WASM 0.2.0 is incompatible; rebuilt engine extensions are required.",
+    "London refused because the pinned engine/harness can offer an extra mulligan beyond an empty starting hand.",
+    "No arbitrary decklists, spell casting, targeting, payment, combat, triggers or replacements in the adapter catalog.",
+    "No general randomness/noninterference or native object-incarnation guarantee outside the catalog.",
+    "No full repository lint/typecheck gate was run; scoped checks are listed above."
+  ]
+}

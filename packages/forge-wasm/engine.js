@@ -36,7 +36,13 @@ export class ForgeEngine {
         return;
       }
       this.worker = this.platform.spawnWorker(this.locations.worker);
-      this.worker.onError((error) => reject(error));
+      this.worker.onError((error) => {
+        reject(error);
+        for (const pending of this.pending.values()) pending.reject(error);
+        this.pending.clear();
+        this.options.onError?.(error);
+        this.dispose();
+      });
       this.worker.onMessage((message) => {
         if (message?.type === "response") {
           const pending = this.pending.get(message.requestId);

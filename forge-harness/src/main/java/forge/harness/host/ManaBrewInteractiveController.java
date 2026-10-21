@@ -89,6 +89,11 @@ public final class ManaBrewInteractiveController extends PlayerController implem
     private boolean probingPayability;
     private boolean autoConfirmPayment;
 
+    @Override
+    public CardCollectionView cheatShuffle(final CardCollectionView cards) {
+        return session.shuffleLibrary(getPlayer(), cards);
+    }
+
     public ManaBrewInteractiveController(
             final Game game,
             final Player player,
@@ -123,9 +128,12 @@ public final class ManaBrewInteractiveController extends PlayerController implem
 
     @Override
     public boolean mulliganKeepHand(final Player mulliganingPlayer, final int cardsToReturn) {
-        final boolean keep = session.awaitMulliganDecision(me(), cardsToReturn);
+        final CardCollection hand = new CardCollection(player.getCardsIn(ZoneType.Hand));
+        if (cardsToReturn > hand.size()) {
+            throw new IllegalStateException("mulligan bottom count exceeds the drawn hand");
+        }
+        final boolean keep = cardsToReturn == hand.size() || session.awaitMulliganDecision(me(), cardsToReturn);
         if (keep && cardsToReturn > 0) {
-            final CardCollection hand = new CardCollection(player.getCardsIn(ZoneType.Hand));
             final CardCollection selected = session.awaitMulliganPutBack(me(), hand, cardsToReturn);
             for (final Card card : selected) {
                 game.getAction().moveToLibrary(card, -1, null);

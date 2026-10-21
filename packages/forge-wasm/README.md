@@ -145,3 +145,32 @@ One internal is exported because Manabrew's own client imports it rather than ke
 ## Licence
 
 `@manabrew/forge-wasm` is distributed under the GNU Affero General Public License version 3 or later. Forge itself is GPL-3.0 licensed. Corresponding source is available in the Manabrew repository and its pinned `forge` submodule.
+
+## Experimental deterministic session options
+
+Both start methods accept `startingPlayerIndex` (a zero-based seat) and
+`randomSeed` (64 lowercase hex characters). These options require externally
+controlled seats. `startingPlayerIndex` bypasses the interactive opening roll.
+`randomSeed` uses a full-width SHA-256 counter generator and independent
+per-seat, per-shuffle library streams through the harness controller hook.
+Other random effects use a shared stream and have not been audited for
+seat/purpose isolation; this is not a general fairness guarantee.
+
+Omitting the new fields retains the existing behavior and numeric `seed`
+semantics. These options require a rebuilt engine from this source tree and are
+not present in published 0.2.0. Worker failures after initialization and
+unexpected Node worker exits now reach `onError` and reject pending operations.
+Dispose the engine after an error; create a new instance to start another game.
+
+Rebuilt Forge stack entries can also include optional `spellCard: CardDto`.
+It carries current characteristics for a spell whose face is visible to the
+viewer, including during announcement. Abilities and unseen spell faces omit
+it. This is a plain card DTO, without the zone-array `visibility` wrapper;
+absence means the producer did not supply a visible spell projection. Existing
+stack fields and callbacks retain their behavior.
+
+Card projections also include optional `firstTurnControlled` (the raw fact before
+haste) and `isBlocking` (including when the blocked attacker has left combat).
+The original haste-aware `summoningSick` field is unchanged. The harness now
+forces keep when a London mulligan requires bottoming the entire drawn hand,
+preventing an extra mulligan; the player still chooses the bottom order.

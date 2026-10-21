@@ -85,6 +85,25 @@ public final class ManaBrewInteractiveSession {
     private final List<long[]> checkpointTimings = new ArrayList<>();
     private boolean priorityPromptOpen;
     private Set<Integer> botSeats = Set.of();
+    private Integer startingPlayerIndex;
+    private String randomSeed;
+    private final Map<Integer, Integer> shuffleCounts = new LinkedHashMap<>();
+
+    void configureRandomness(final String seed, final Integer firstPlayer) {
+        randomSeed = seed;
+        startingPlayerIndex = firstPlayer;
+    }
+
+    CardCollectionView shuffleLibrary(final Player player, final CardCollectionView cards) {
+        if (randomSeed == null) return cards;
+        final int seat = SnapshotExtractor.playerIndex(game, player);
+        final int count = shuffleCounts.merge(seat, 1, Integer::sum) - 1;
+        final List<Card> ordered = new ArrayList<>();
+        cards.forEach(ordered::add);
+        ordered.sort(java.util.Comparator.comparingInt(Card::getId));
+        java.util.Collections.shuffle(ordered, new SessionRandom(randomSeed, "seat:" + seat + ":shuffle:" + count));
+        return new CardCollection(ordered);
+    }
 
     static final class SessionSnapshot {
         private final GameSnapshot game;
@@ -856,6 +875,9 @@ public final class ManaBrewInteractiveSession {
 
     Player awaitFirstPlayerRoll(final int playerId, final List<Player> players) {
         requireAttached();
+        if (startingPlayerIndex != null) {
+            return game.getRegisteredPlayers().get(startingPlayerIndex);
+        }
         final Random rng = forge.util.MyRandom.getRandom();
         final int sides = 20;
         final Map<Player, Integer> openingRolls = new LinkedHashMap<Player, Integer>();

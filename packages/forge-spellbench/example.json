@@ -1,0 +1,22 @@
+{
+  "schema": "spellbench-tournament-config/v2",
+  "tournament_dir": "tmp/forge-spellbench-run",
+  "format": "forge-spike-bo1",
+  "deck_pool": [{ "catalog_id": "red-combat" }, { "catalog_id": "green-combat" }],
+  "engine": {
+    "command": [
+      "node",
+      "packages/forge-spellbench/cli.mjs",
+      "--experimental",
+      "--engine",
+      "packages/forge-wasm"
+    ]
+  },
+  "bots": [
+    { "name": "first", "version": "2.0.0", "type": "builtin" },
+    { "name": "uniform", "version": "2.0.0", "type": "builtin" }
+  ],
+  "pairs_per_matchup": 2,
+  "stats_seed": 0,
+  "workers": 1
+}

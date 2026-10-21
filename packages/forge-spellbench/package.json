@@ -1,0 +1,12 @@
+{
+  "name": "@manabrew/forge-spellbench-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@manabrew/forge-wasm": ">=0.3.0"
+  }
+}

@@ -98,6 +98,12 @@ Snapshots are **per-viewer**: `getSnapshot` takes a `viewer` seat index (`-1` = 
 
 Per-copy appearance is bound by `host/CardCosmeticBindings` during initial zone insertion, before identical `PaperCard` entries can lose their physical-entry association through shuffle. Clear pending entry queues at initial shuffle; later tokens must not consume deck bindings. Bindings use immutable game card IDs and retain foil plus typed cosmetics for exact owner/token-script overrides. Do not mutate shared `PaperCard` objects or recover appearance by name.
 
+Stack `spellCard` is an optional plain `CardDto`, not a zone-card visibility wrapper. Emit it only for spells whose source face passes the existing viewer visibility check, including the temporary casting entry. Omit it for abilities and unseen faces; absence means unavailable. Consumers cannot treat absence as an empty spell or reconstruct hidden characteristics from the source ID.
+
+`firstTurnControlled` is the raw `Card.isFirstTurnControlled()` fact; preserve the existing haste-aware `summoningSick` field for consumers that use it to assess attack/tap restrictions. `isBlocking` comes from `Combat.isBlocking()`, not from a surviving attacker/blocker pair: removing an attacker does not necessarily stop its blockers from being blocking creatures.
+
+The host defers London bottoming until keep. At `cardsToReturn == hand.size()`, force keep and still collect the bottom order: the pinned upstream `LondonMulligan.canMulligan()` uses `<=`, so deferring bottoming without this boundary allows an extra mulligan and a subsequent automatic invalid keep. Never move that legality correction into a consumer adapter.
+
 `host/CardCosmeticsCodec` validates the foundation's closed material objects before Gson conversion. Fractional material values require type-specific floating-point overrides in `scripts/gen-harness-prompts.mjs`; its generic numeric fallback is integer. Keep explicit zero finish coverage and rebuild both the harness and browser Web Image after cosmetic wire changes.
 
 Visible card and stack-source projections read the same bindings; hidden redaction clears foil and cosmetics. Prompt-card disclosure is explicit, not spectator visibility. Preserve bindings across checkpoints without rewinding the live card-ID counter. Rebuild the browser Web Image as well as the harness after changing this producer.

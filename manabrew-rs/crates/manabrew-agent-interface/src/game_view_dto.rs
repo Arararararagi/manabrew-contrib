@@ -759,6 +759,8 @@ fn card_to_dto_with_face_visibility(
         counters,
         damage: card.damage,
         summoning_sick: card.summoning_sick && !card.has_haste(),
+        first_turn_controlled: Some(card.summoning_sick),
+        is_blocking: None,
         is_copy: card.copied_permanent.is_some(),
         is_double_faced: card.other_part.is_some(),
         flashback_cost: card.get_flashback_cost(),
@@ -1065,6 +1067,7 @@ impl GameViewDtoExt for GameViewDto {
                         .map(|c| player_id_str(c.owner))
                         .unwrap_or_default(),
                     identity,
+                    spell_card: None,
                     foil: visible_source.is_some_and(|card| card.paper_foil),
                     cosmetics: visible_source
                         .and_then(|card| card.cosmetics.clone())

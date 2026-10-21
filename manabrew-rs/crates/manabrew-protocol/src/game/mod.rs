@@ -363,6 +363,12 @@ pub struct CardDto {
     pub counters: BTreeMap<String, u32>,
     pub damage: i32,
     pub summoning_sick: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub first_turn_controlled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub is_blocking: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_copy: bool,
     pub is_double_faced: bool,
@@ -420,6 +426,9 @@ pub struct StackObjectDto {
     pub controller_id: String,
     pub owner_id: String,
     pub identity: CardIdentity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub spell_card: Option<CardDto>,
     #[serde(default)]
     pub foil: bool,
     #[serde(
@@ -452,6 +461,7 @@ mod stack_object_tests {
             controller_id: "player-0".into(),
             owner_id: "player-1".into(),
             identity: CardIdentity::default(),
+            spell_card: None,
             foil: false,
             cosmetics: None,
             text: String::new(),
@@ -482,8 +492,30 @@ mod stack_object_tests {
         let stack_object: StackObjectDto = serde_json::from_value(value).unwrap();
 
         assert!(stack_object.owner_id.is_empty());
+        assert!(stack_object.spell_card.is_none());
         assert!(!stack_object.is_double_faced);
         assert_eq!(stack_object.face_index, 0);
+    }
+
+    #[test]
+    fn round_trips_visible_spell_projection() {
+        let value = serde_json::json!({
+            "id": "stack-1",
+            "spellCard": {"id": "card-1", "identity": {"name": "Shock"}, "color": "R", "cmc": 1,
+                "firstTurnControlled": true, "isBlocking": false}
+        });
+        let stack_object: StackObjectDto = serde_json::from_value(value).unwrap();
+        let card = stack_object.spell_card.as_ref().unwrap();
+        assert_eq!(card.identity.name, "Shock");
+        assert_eq!(card.cmc, 1);
+        let encoded = serde_json::to_value(stack_object).unwrap();
+        assert_eq!(encoded["spellCard"]["color"], "R");
+        assert_eq!(encoded["spellCard"]["firstTurnControlled"], true);
+        assert_eq!(encoded["spellCard"]["isBlocking"], false);
+        assert!(serde_json::to_value(StackObjectDto::default())
+            .unwrap()
+            .get("spellCard")
+            .is_none());
     }
 }
 

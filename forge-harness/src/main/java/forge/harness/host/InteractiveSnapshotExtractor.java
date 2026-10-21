@@ -771,6 +771,8 @@ public final class InteractiveSnapshotExtractor {
         dto.mergedCardIds = mergedCardIds(card);
         dto.damage = card.getDamage();
         dto.summoningSick = card.hasSickness();
+        dto.firstTurnControlled = card.isFirstTurnControlled();
+        dto.isBlocking = game.getCombat() != null && game.getCombat().isBlocking(card);
         dto.isCopy = card.isCloned() || card.getCopiedPermanent() != null;
         dto.isDoubleFaced = card.isDoubleFaced();
         dto.isTransformed = card.isTransformed();
@@ -1128,6 +1130,9 @@ public final class InteractiveSnapshotExtractor {
                     ? item.getStackDescription()
                     : visibleSource == null ? "" : normalizeCardName(source.getName());
             stackItem.put("identity", stackIdentity(name, visibleSource));
+            if (item.isSpell() && visibleSource != null) {
+                stackItem.put("spellCard", cardDto(game, visibleSource, false));
+            }
             putStackCosmetics(stackItem, game, visibleSource);
             stackItem.put("text", item.getStackDescription());
             putIfNotBlank(stackItem, "sourceAbilityText", sourceAbilityText(sa));
@@ -1181,6 +1186,9 @@ public final class InteractiveSnapshotExtractor {
                 : "");
         stackItem.put("identity", stackIdentity(
                 visibleSource == null ? "" : normalizeCardName(source.getName()), visibleSource));
+        if (visibleSource != null) {
+            stackItem.put("spellCard", cardDto(game, visibleSource, false));
+        }
         putStackCosmetics(stackItem, game, visibleSource);
         stackItem.put("text", castingAbility.getStackDescription());
         putIfNotBlank(stackItem, "sourceAbilityText", sourceAbilityText(castingAbility));

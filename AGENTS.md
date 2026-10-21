@@ -77,6 +77,8 @@ These files start minimal and grow over time. If a section outgrows its file, sp
 
 The `forge/` submodule has no local `AGENTS.md`; treat it as read-only and use it only as the Java source of truth.
 
+For SpellBench integration, read `packages/forge-spellbench/README.md` and `docs/forge-wasm-spellbench-v2.md`. The adapter supports six audited land, burn and creature catalogs, including London mulligans and independent combat declarations. It requires opt-in starting-seat/randomness extensions, `spellCard`/`firstTurnControlled`/`isBlocking` projections and the harness London boundary correction; published Forge-WASM 0.2.0 cannot run it. General decks and coupled combat restrictions remain refused. Target slot 0 and absent modes/X are audited catalog invariants, not general prompt semantics. Passing conformance for these catalogs is not general card/decision support.
+
 ## Before every commit
 
 The pre-commit hook runs staged-file formatting and linting for every commit. Full-repository TypeScript and Rust gates run in `build-checks.yml`, where Rust checks are scoped to Rust-affecting changes.
