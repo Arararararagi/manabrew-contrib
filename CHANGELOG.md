@@ -1,5 +1,49 @@
 # Changelog
 
+## [3.64.0](https://github.com/witchesofthehill/manabrew/compare/v3.63.2...v3.64.0) (2026-10-21)
+
+### Features
+
+* **ui:** establish manabrew brand identity ([#1084](https://github.com/witchesofthehill/manabrew/issues/1084)) ([4082740](https://github.com/witchesofthehill/manabrew/commit/40827402cdfb4bceb0f1524e3a0810f81cef1a4f))
+
+## [3.63.2](https://github.com/witchesofthehill/manabrew/compare/v3.63.1...v3.63.2) (2026-10-21)
+
+### Fixes
+
+* disable foil shader overload ([#1096](https://github.com/witchesofthehill/manabrew/issues/1096)) ([b1b9d58](https://github.com/witchesofthehill/manabrew/commit/b1b9d5847b2a9aee6e3f744a4a18d305fd394ab6))
+
+## [3.63.1](https://github.com/witchesofthehill/manabrew/compare/v3.63.0...v3.63.1) (2026-10-21)
+
+### Fixes
+
+* tinybones actionspace and desktop ([#1094](https://github.com/witchesofthehill/manabrew/issues/1094)) ([00c847a](https://github.com/witchesofthehill/manabrew/commit/00c847a9ad79a143c1f3f2b2bb914fe1f4514e92))
+
+## [3.63.0](https://github.com/witchesofthehill/manabrew/compare/v3.62.2...v3.63.0) (2026-10-21)
+
+### Features
+
+* add engine-backed mechanic previews ([#1069](https://github.com/witchesofthehill/manabrew/issues/1069)) ([bb27666](https://github.com/witchesofthehill/manabrew/commit/bb276666fe7afb42d194d30049b8dc8d39e76077))
+
+## Unreleased
+
+### Fixes
+
+* Preserve each Room, split and aftermath half's frame color instead of inheriting the whole card's combined colors in hand and stack previews.
+* Highlight unlocked Room doors and the door represented on the stack in both card views, with outlines that include the collector strip.
+* Preserve localized Prototype abilities and reminders, including Japanese line wrapping.
+* Place localized leveler actions in the correct band without duplicating ability text.
+* Preserve the current mana cost when previewing copies of prototyped creatures.
+* Fix the Clippy build failure caused by oversized draft checkpoint agent variants.
+* Preserve translated leveler abilities and reminders in native card rendering.
+* Match Realistic print-dot previews to production without changing scan finish geometry.
+* Check relay support for new card materials before submitting a customized deck.
+
+## [3.62.2](https://github.com/witchesofthehill/manabrew/compare/v3.62.1...v3.62.2) (2026-10-21)
+
+### Fixes
+
+* forge-bot default ([#1087](https://github.com/witchesofthehill/manabrew/issues/1087)) ([6789e0b](https://github.com/witchesofthehill/manabrew/commit/6789e0b6ca17b967b0aeebcf137da53945e7fb3b))
+
 ## [3.62.1](https://github.com/witchesofthehill/manabrew/compare/v3.62.0...v3.62.1) (2026-10-20)
 
 ### Fixes

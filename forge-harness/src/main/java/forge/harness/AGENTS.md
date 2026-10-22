@@ -45,6 +45,10 @@ Action enumeration must allow Forge's static-ability checks to run. `GameActionU
 
 `HarnessCostPlumbing.payWithControllerDecision` pays through `CostPayment.payCost` for `ManaBrewInteractiveController` (`humanCostPayment=true`) and `CostPayment.payComputerCosts` for `DeterministicController` (`false`). Only `payCost` records `paidCostParts`, and `GameActionUtil.rollbackAbility` → `CostPayment.refundPayment` refunds nothing else — so a cancelled mana payment after a `{T}` part was already paid (tap sorts before mana) untaps the permanent only on the `payCost` path. The callers in `HarnessPlayPlumbing` must hand the same `CostPayment` instance to `rollbackAbility` that paid the cost; a fresh one has an empty paid list. Parity stays on `payComputerCosts` because `payCost` asks `orderCosts` for multi-part costs, and `DeterministicController.orderCosts` shuffles with the shared agent RNG, which the Rust engine does not consume.
 
+### Mana conversion is applied to the `CostPayment` before paying
+
+"Mana of any type can be spent" (Tinybones, Heist, `ManaConvert` statics) lives on the `CostPayment` matrix. `payCost` hands that matrix to `payManaCost`, which puts it on the pool; a bare `CostPayment` is identity-only. `HarnessPlayPlumbing.applyManaConversion` mirrors the conversion block in `PlaySpellAbility.playAbility`, and every play path resets the pool with `restoreColorReplacements` afterwards, as Forge does. The action space cannot catch a missing conversion: `ComputerUtilMana` applies the MayPlay conversion by itself, so the spell is offered either way. `HarnessPlayPlumbingTest` locks the Tinybones case.
+
 ### Convoke / Improvise in payment
 
 `chooseCardsForConvokeOrImprovise` declines the upfront cost reduction outside payability probes (both controllers). Convoke/improvise is then resolved at payment time: interactively in `ManaBrewInteractiveController.payManaInteractively` (`payConvoke`/`convokePaymentSources`), and automatically in `AutoPay.payConvokeImprovise` for the committing auto-pay path (only the parity runner routes through it; the host's auto button floats mana via `AutoPay.floatManaForCost` and leaves convoke/improvise taps to explicit prompt actions). Both tap the chosen creatures/artifacts, record `sa.addTappedForConvoke`, fire the `TapAll` trigger, and reduce the cost via `ManaCostBeingPaid.payManaViaConvoke`. **Parity caveat:** the Rust engine's auto-pay does not yet tap convoke/improvise sources, so `yarn parity` diverges on convoke/improvise spells until `manabrew-engine`'s auto-pay is mirrored.
@@ -98,15 +102,19 @@ Snapshots are **per-viewer**: `getSnapshot` takes a `viewer` seat index (`-1` = 
 
 Per-copy appearance is bound by `host/CardCosmeticBindings` during initial zone insertion, before identical `PaperCard` entries can lose their physical-entry association through shuffle. Clear pending entry queues at initial shuffle; later tokens must not consume deck bindings. Bindings use immutable game card IDs and retain foil plus typed cosmetics for exact owner/token-script overrides. Do not mutate shared `PaperCard` objects or recover appearance by name.
 
-`host/CardCosmeticsCodec` validates the foundation's closed material objects before Gson conversion. Fractional material values require type-specific floating-point overrides in `scripts/gen-harness-prompts.mjs`; its generic numeric fallback is integer. Keep explicit zero finish coverage and rebuild both the harness and browser Web Image after cosmetic wire changes.
+`host/CardCosmeticsCodec` validates the foundation's closed material objects before Gson conversion. Fractional material values require type-specific floating-point overrides in `scripts/gen-harness-prompts.mjs`; its generic numeric fallback is integer. `printDots.artwork` accepts booleans only, preserves false, and removes true as the inclusive default; zero amount still removes the dots object. Keep explicit zero finish coverage and rebuild both the harness and browser Web Image after cosmetic wire changes. Strict old codecs reject new fields, so these changes require the protocol owners' breaking release path.
 
 Visible card and stack-source projections read the same bindings; hidden redaction clears foil and cosmetics. Prompt-card disclosure is explicit, not spectator visibility. Preserve bindings across checkpoints without rewinding the live card-ID counter. Rebuild the browser Web Image as well as the harness after changing this producer.
+
+Mechanic projections use Forge's predicates and selected ability state: independent `unlockedDoors`, Case `isSolved`, exile plus `hasSuspend`, exile plus `isOnAdventure`, Prototype selection, and active `faceIndex`. Play actions use the existing `mode`; Suspend uses its `alternative`/`suspend` variant in both producers. Activated leveling uses optional `levelUp: "class" | "creature"`. Only cast choices whose emitted mode does not identify a face carry action `faceIndex`, including normal-mode MDFC spells and alternative-cost Room halves; activation and payment actions use the source card's active face. Adventure's spell half is not a transformed DFC. Visible stack entries carry the exact source/spell-LKI `sourceCard`, including its selected face, identity, foil and cosmetics. Outer identity is reserved for legitimate source-less fallbacks, never duplicated with `sourceCard`; hidden sources omit it.
+
+Forge's LKI copier drops unlocked Room doors and the Prototype timestamp. Omit unknown LKI state rather than reporting false or locked; a spell ability's explicit `Prototype` parameter can recover its selected variant. A Room with both doors locked has an empty active name: retain its `PaperCard` name for visible printing identity without changing the live characteristics or weakening hidden-card redaction.
 
 `CardDto.keywords` retains raw engine identifiers. Visible cards also emit `keywordLabels`, keyed by the original string and formatted with `KeywordInterface.getTitle()`. Generated rules use those labels without duplicating printed keyword lines; never expose cost DSL as rules text or parse it in the renderer. Hidden redaction clears the label map.
 
 ### Remembered opponent hands
 
-`host/HandKnowledge` belongs to one interactive session and records only human recipients' opponent-hand disclosures. Prompt cards pass through the recipient-aware `promptCard`; current hand visibility is recorded during snapshot projection. Retain the last-disclosed `CardDto` unchanged after publication, rather than rebuilding it from hidden live state. Forge AI, Manabot seats, spectators, and the viewer's own hand never seed this memory. It does not grant Forge look permissions or feed bot decisions. The existing visible-card entries plus the hand's total `count` carry remembered cards and anonymous backs; the session survives reconnects.
+`host/HandKnowledge` belongs to one interactive session and records only human recipients' opponent-hand disclosures. `promptCard` reuses `InteractiveSnapshotExtractor.cardDto` for zone and mechanic fields, then records the disclosure for its recipient; snapshots record current hand visibility. Retain the last-disclosed `CardDto` unchanged after publication, rather than rebuilding it from hidden live state. Forge AI, Manabot seats, spectators, and the viewer's own hand never seed this memory. It does not grant Forge look permissions or feed bot decisions. The existing visible-card entries plus the hand's total `count` carry remembered cards and anonymous backs; the session survives reconnects.
 
 Forge reuses card IDs across zone changes: knowledge is keyed by card ID, game timestamp, and actual hand-zone owner. A public identifiable departure removes only that occurrence; an anonymous departure clears the affected owner's whole remembered hand, even when the departed card was unknown. Same-hand reordering preserves the last disclosure. New hidden draws stay unknown. `ChangeZoneEffect` conceals exiled cards **after** `GameEventCardChangeZone`, so track recent departures per viewer and handle `GameEventCardStatsChanged`; another seat's projection must not consume that viewer's pending concealment tracking.
 
@@ -123,13 +131,15 @@ Use the session's `captureSnapshot`/`restoreSnapshot` pair for checkpoints and m
 
 ## Build / verify
 
-Jar is produced by `node scripts/harness.mjs ensure` (or `mvn -pl forge-harness package` from `forge/`). For a fast compile-only check against an existing fat jar:
+Jar is produced by `node scripts/harness.mjs ensure` (or `mvn -pl forge-harness -am package -DskipTests` from the repository root). For a fast compile-only check against an existing fat jar:
 
 ```
 javac -d /tmp/out -cp target/forge-harness-jar-with-dependencies.jar $(find src/main/java -name '*.java')
 ```
 
 **After a `forge` submodule bump, do a _clean_ rebuild** (`mvn -pl forge-harness -am clean package -DskipTests`). `ensure`/`package` are incremental and key off source mtime, not the classpath — so a Forge change recompiles `forge/` but reuses the harness `.class` files compiled against the **old** Forge, silently shipping a broken jar (missing newer card enums like `CardSplitType.Prepare`, or synthetic `switch`-map classes like `SnapshotExtractor$1` → deck-load failures or a runtime `NoClassDefFoundError`). A Forge API change may also require updating the `PlayerController` overrides in `host/ManaBrewInteractiveController` + `parity/DeterministicController` (and call sites in `common/HarnessPlayPlumbing`) before it compiles. Keep the submodule pinned to the recorded gitlink with `git submodule update --init forge`; only `--remote` advances it. Build with JDK 18–21 — newer JDKs (e.g. 26) fail to compile Forge.
+
+If a merged harness cannot find a Forge API, compare the `forge` gitlink with main before changing the harness. Git can retain a branch's rollback when main's pin is unchanged since the merge base.
 
 ## Crash reporting
 
