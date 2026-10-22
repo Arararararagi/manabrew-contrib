@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.2](https://github.com/witchesofthehill/manabrew/compare/v3.64.1...v3.64.2) (2026-10-22)
+
+### Fixes
+
+* preload in the background ([#1064](https://github.com/witchesofthehill/manabrew/issues/1064)) ([5a0e2f5](https://github.com/witchesofthehill/manabrew/commit/5a0e2f5d22f550ea682adbafd0188d08f7b5422b))
+
 ## [3.64.1](https://github.com/witchesofthehill/manabrew/compare/v3.64.0...v3.64.1) (2026-10-22)
 
 ### Fixes
