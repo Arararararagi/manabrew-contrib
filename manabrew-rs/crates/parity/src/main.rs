@@ -256,9 +256,17 @@ struct Cli {
     #[arg(long)]
     fuzz: bool,
 
+    /// Print the fuzz card-pool inventory as JSON and exit
+    #[arg(long)]
+    inventory: bool,
+
     /// Number of fuzz iterations (default: 100)
     #[arg(long, default_value_t = 100)]
     iterations: usize,
+
+    /// Skip the first N fuzz iterations, keeping the master-seed stream aligned
+    #[arg(long, default_value_t = 0)]
+    fuzz_start: usize,
 
     /// Master seed for fuzz reproducibility (default: 42)
     #[arg(long, default_value_t = 42)]
@@ -470,6 +478,11 @@ fn main() {
     }
     let games_flag_present =
         std::env::args().any(|arg| arg == "--games" || arg.starts_with("--games="));
+
+    if cli.inventory {
+        run_inventory_mode(&cli);
+        return;
+    }
 
     if cli.analyze && !cli.serve {
         #[cfg(feature = "analyze")]
@@ -1546,6 +1559,24 @@ fn format_full_log_for_results(results: &[MatchupResult]) -> String {
     out
 }
 
+#[derive(serde::Serialize)]
+struct InventoryReport {
+    stats: parity::card_pool::PoolStats,
+    cards: Vec<String>,
+}
+
+fn run_inventory_mode(cli: &Cli) {
+    let data = load_data_or_exit(cli);
+    let (pool, stats) = CardPool::discover(data.db.as_ref());
+    let report = InventoryReport {
+        stats,
+        cards: pool.cards.into_iter().map(|card| card.name).collect(),
+    };
+    let output =
+        serde_json::to_string_pretty(&report).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+    write_output(cli, &output);
+}
+
 fn run_fuzz_mode(cli: &Cli) {
     if cli.is_verbose() {
         eprintln!(
@@ -1597,9 +1628,15 @@ fn run_fuzz_mode(cli: &Cli) {
 
     // Derive per-iteration seeds from master seed
     let mut master_rng = JavaRandom::new(cli.master_seed as i64);
+    for _ in 0..cli.fuzz_start {
+        master_rng.next_int(i32::MAX);
+        master_rng.next_int(i32::MAX);
+        master_rng.next_int(i32::MAX);
+    }
 
     let mut results: Vec<FuzzResult> = Vec::new();
     let total = cli.iterations;
+    let first_iteration = cli.fuzz_start;
 
     for iteration in 0..total {
         let deck1_seed = master_rng.next_int(i32::MAX) as u64;
@@ -1635,6 +1672,13 @@ fn run_fuzz_mode(cli: &Cli) {
             full_log: false,
             live_log: None,
         };
+
+        eprintln!(
+            "[parity] fuzz iteration {}/{} seed={}",
+            first_iteration + iteration + 1,
+            first_iteration + total,
+            game_seed
+        );
 
         let matchup_result = if let Some(ref mut srv) = server {
             if srv.is_alive() {
@@ -1674,11 +1718,12 @@ fn run_fuzz_mode(cli: &Cli) {
 
         if cli.is_verbose() {
             let n = iteration + 1;
+            let absolute = first_iteration + iteration;
             match matchup_result.status {
                 MatchupStatus::Pass => {
                     eprintln!(
                         "[parity] [{}/{}] iteration={} seed={} ... PASS ({} snapshots)",
-                        n, total, iteration, game_seed, matchup_result.snapshots_compared
+                        n, total, absolute, game_seed, matchup_result.snapshots_compared
                     );
                 }
                 MatchupStatus::Skipped => {
@@ -1686,7 +1731,7 @@ fn run_fuzz_mode(cli: &Cli) {
                         "[parity] [{}/{}] iteration={} seed={} ... SKIPPED: {}",
                         n,
                         total,
-                        iteration,
+                        absolute,
                         game_seed,
                         matchup_result.skip_reason.as_deref().unwrap_or("ignored")
                     );
@@ -1694,7 +1739,7 @@ fn run_fuzz_mode(cli: &Cli) {
                 MatchupStatus::Fail => {
                     eprintln!(
                         "[parity] [{}/{}] iteration={} seed={} ... FAIL ({} divergences)",
-                        n, total, iteration, game_seed, matchup_result.divergence_count
+                        n, total, absolute, game_seed, matchup_result.divergence_count
                     );
                 }
                 MatchupStatus::Error => {
@@ -1702,7 +1747,7 @@ fn run_fuzz_mode(cli: &Cli) {
                         "[parity] [{}/{}] iteration={} seed={} ... ERROR: {}",
                         n,
                         total,
-                        iteration,
+                        absolute,
                         game_seed,
                         matchup_result.error_message.as_deref().unwrap_or("unknown")
                     );
@@ -1711,7 +1756,7 @@ fn run_fuzz_mode(cli: &Cli) {
         }
 
         results.push(FuzzResult {
-            iteration,
+            iteration: first_iteration + iteration,
             game_seed,
             deck1_spec: deck1_inline,
             deck2_spec: deck2_inline,

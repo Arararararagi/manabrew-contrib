@@ -48,6 +48,33 @@ The parity binary mmaps `src-tauri/resources/cardset.rkyv` at startup. `yarn par
 
 Parity workflows build with `--profile parity` (release + `debug-assertions`), output dir `target/parity/`, so the dual-evaluation drift guards in the engine stay active during parity runs. Compiled-vs-legacy selector drift is reported as `[selector-drift]` lines (once per selector); set `FORGE_SELECTOR_ASSERT=1` to make it panic at the divergence site instead.
 
+### Capture a baseline
+
+```bash
+yarn parity:baseline
+```
+
+Writes `target/parity-baseline/<sha>/` with raw reports, `summary.json`, and
+`summary.md`. The runner rebuilds the parity binary with `cargo build --profile
+parity` unless `--no-build` is passed. It calls the JAR directly, so it does not
+invoke `harness.mjs ensure` and does not need Maven. It splits the regression
+suite into single-matchup entries and matrix entries, then adds a fuzz sample.
+`--no-suite`, `--no-matrix`, and `--fuzz 0` scope the run. `--resume` reuses
+the reports already in the output directory instead of re-running them, and
+`summary.json` is rewritten after every phase, so a long baseline survives an
+interrupted shell.
+
+`parity --inventory` prints the fuzz pool, exclusion counts, and the missing
+effect APIs with example cards as JSON. It loads only the card database; unlike
+the fuzz modes it needs no Java harness.
+
+`parity --fuzz` prints one `[parity] fuzz iteration N/M seed=…` line per
+iteration, so a hung game is locatable in the log. `--fuzz-start N` skips the
+first N iterations while keeping the master-seed stream aligned, which is how
+the baseline runner splits a fuzz run into one process per iteration.
+
+See `docs/agents/PARITY_BASELINE.md` for the current snapshot and caveats.
+
 ### Add a regression entry
 
 After fixing a bug, lock the fix in. Add to `regression.json`:
