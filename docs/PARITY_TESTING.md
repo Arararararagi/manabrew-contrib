@@ -169,7 +169,7 @@ yarn parity:test \
 
 A pod only stays in parity as long as every deck in it is individually
 parity-stable in 1v1 — the decks that already diverge on their own
-(`kaalia_regression`, `teval`, `ashling`, `worldShaper`, `ramsesCommander`)
+(`kaalia_regression`, `teval`, `ashling`, `worldShaper`)
 drag a pod apart at the same card. Two engine gaps show up first in pods
 because the Commander decks lean on them:
 
