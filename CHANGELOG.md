@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.1](https://github.com/witchesofthehill/manabrew/compare/v3.64.0...v3.64.1) (2026-10-22)
+
+### Fixes
+
+* **ui:** stop app start hanging on deck cover images ([#1105](https://github.com/witchesofthehill/manabrew/issues/1105)) ([28ad521](https://github.com/witchesofthehill/manabrew/commit/28ad5217b8430e56ac04031bc86c6d9e324ec7c2))
+
 ## [3.64.0](https://github.com/witchesofthehill/manabrew/compare/v3.63.2...v3.64.0) (2026-10-21)
 
 ### Features
