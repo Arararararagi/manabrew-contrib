@@ -76,6 +76,43 @@ let activeTheme: Theme = getTheme();
 const TINTED_TEXT_STYLES: TextStyle[] = [];
 const SHADOW_CONTEXTS: { width: number; height: number; context: GraphicsContext }[] = [];
 const NO_FOIL_EXCLUSIONS = [] as const;
+const FACE_HOLD_CAP_MS = 3000;
+const FACE_HOLD_JOIN_MS = 50;
+
+interface FaceHold {
+  readonly members: Set<CardSprite>;
+  readonly waiting: Set<CardSprite>;
+  released: boolean;
+  timer: ReturnType<typeof setTimeout>;
+}
+let joinableFaceHold: FaceHold | null = null;
+
+function joinFaceHold(sprite: CardSprite): FaceHold {
+  let hold = joinableFaceHold;
+  if (!hold) {
+    const created: FaceHold = {
+      members: new Set(),
+      waiting: new Set(),
+      released: false,
+      timer: setTimeout(() => releaseFaceHold(created), FACE_HOLD_CAP_MS),
+    };
+    hold = joinableFaceHold = created;
+    setTimeout(() => {
+      if (joinableFaceHold === created) joinableFaceHold = null;
+    }, FACE_HOLD_JOIN_MS);
+  }
+  hold.members.add(sprite);
+  hold.waiting.add(sprite);
+  return hold;
+}
+
+function releaseFaceHold(hold: FaceHold): void {
+  if (hold.released) return;
+  hold.released = true;
+  clearTimeout(hold.timer);
+  if (joinableFaceHold === hold) joinableFaceHold = null;
+  for (const sprite of hold.members) sprite.revealHeldFace();
+}
 
 function drawShadowContext(context: GraphicsContext, width: number, height: number): void {
   context.clear();
@@ -479,6 +516,7 @@ export class CardSprite extends Container {
   private readonly kind: "battlefield" | "hand" | "zone";
   private handRulesFace: HandRulesCardFace | null = null;
   private handRulesView = false;
+  private faceHold: FaceHold | null = null;
   private handRulesInteractive = true;
   private handRulesActions: HandActionOption[] = [];
   private onSelectHandRulesAction: ((action: HandActionOption) => void) | null = null;
@@ -916,13 +954,9 @@ export class CardSprite extends Container {
       this.ownedImageTexture = null;
       this.imageIsArtwork = false;
       this._imageLoaded = false;
-      this.imageSpr.visible = false;
-      this.imageMask.visible = false;
-      this.syncHandFaceVisibility();
     }
-    this.placeholderGfx.visible = !this._imageLoaded;
-    this.nameText.visible = !hidden && !this._imageLoaded;
     this.nameText.text = hidden ? "" : this.card.identity.name;
+    this.syncHandFaceVisibility();
     if (this.reapplyOrientation()) this.rebuildDecorations(true);
 
     const card = this.card;
@@ -931,28 +965,6 @@ export class CardSprite extends Container {
     const faceIndex = this.previewFace ?? gameCardFaceIndex(card);
     const tier = this.selectRasterTier();
     this.renderTier = tier;
-    const fallback =
-      custom && !this._imageLoaded
-        ? useScryfallStore
-            .getState()
-            .getCardTexture(deckCard!, "full", faceIndex)
-            .then((scan) => {
-              if (
-                !this.destroyed &&
-                generation === this.loadGeneration &&
-                !this._imageLoaded &&
-                scan !== Texture.EMPTY
-              )
-                this.showImage(scan);
-              return scan;
-            })
-            .catch((error: unknown) => {
-              if (!this.destroyed && generation === this.loadGeneration) {
-                console.warn("[pixi] card scan load failed", card.identity.name, error);
-              }
-              return Texture.EMPTY;
-            })
-        : null;
     let texture: Texture;
     let owned = false;
     let artwork = false;
@@ -991,14 +1003,12 @@ export class CardSprite extends Container {
         card.identity.name,
         error,
       );
-      texture = fallback
-        ? await fallback
-        : custom
-          ? await useScryfallStore
-              .getState()
-              .getCardTexture(deckCard!, "full", faceIndex)
-              .catch(() => Texture.EMPTY)
-          : Texture.EMPTY;
+      texture = custom
+        ? await useScryfallStore
+            .getState()
+            .getCardTexture(deckCard!, "full", faceIndex)
+            .catch(() => Texture.EMPTY)
+        : Texture.EMPTY;
     }
     if (this.destroyed || generation !== this.loadGeneration) {
       if (owned) texture.destroy(true);
@@ -1013,10 +1023,6 @@ export class CardSprite extends Container {
       this.ownedImageTexture = null;
       this.imageIsArtwork = false;
       this._imageLoaded = false;
-      this.imageSpr.visible = false;
-      this.imageMask.visible = false;
-      this.placeholderGfx.visible = true;
-      this.nameText.visible = !hidden;
       const previousCounterReserve = this.frameCounterReserve;
       this.renderFrame();
       if (this.frameCounterReserve !== previousCounterReserve) this.updateCounters();
@@ -1032,11 +1038,7 @@ export class CardSprite extends Container {
     this.ownedImageTexture = owned ? texture : null;
     this.imageIsArtwork = artwork;
     this.imageSpr.texture = texture;
-    this.imageSpr.visible = true;
-    this.imageMask.visible = true;
     this.fitImageToSlot();
-    this.placeholderGfx.visible = false;
-    this.nameText.visible = false;
     this._imageLoaded = true;
     const previousCounterReserve = this.frameCounterReserve;
     this.renderFrame();
@@ -1165,11 +1167,46 @@ export class CardSprite extends Container {
     this.updateHandControls();
     this.refreshCardRadiusChrome();
   }
+  // Cards that start waiting together appear together, never one by one.
+  private holdUntilFaceReady(pending: boolean): void {
+    const hold = this.faceHold;
+    if (!pending) {
+      if (hold && !hold.released) {
+        hold.waiting.delete(this);
+        if (hold.waiting.size > 0) {
+          this.renderable = false;
+          return;
+        }
+        releaseFaceHold(hold);
+      }
+      this.faceHold = null;
+      this.renderable = true;
+      return;
+    }
+    if (hold?.released) {
+      this.renderable = true;
+      return;
+    }
+    if (hold) hold.waiting.add(this);
+    else this.faceHold = joinFaceHold(this);
+    this.renderable = false;
+  }
+  revealHeldFace(): void {
+    if (this.destroyed) return;
+    this.renderable = true;
+    this.onVisualChange?.();
+  }
   private syncHandFaceVisibility(): void {
     const hidden = this.hasHiddenIdentity();
     const ready = !hidden && this.handRulesFace?.imageReady === true;
-    this.printedFaceContainer.visible = hidden || !this.handRulesView || !ready;
-    this.printedChromeContainer.visible = this.printedFaceContainer.visible;
+    const pending = !hidden && this.handRulesView && !ready;
+    this.holdUntilFaceReady(pending);
+    this.printedFaceContainer.visible = hidden || !this.handRulesView || pending;
+    this.printedChromeContainer.visible = hidden || !this.handRulesView;
+    this.imageSpr.visible = this._imageLoaded && !pending;
+    this.imageMask.visible = this.imageSpr.visible;
+    this.placeholderGfx.visible = !this.imageSpr.visible;
+    this.nameText.visible = !hidden && !this.imageSpr.visible;
     if (this.handRulesFace) {
       this.handRulesFace.visible = !hidden && ready && (this.handRulesView || !this._imageLoaded);
     }
@@ -1627,6 +1664,13 @@ export class CardSprite extends Container {
     }
   }
   destroy(options?: DestroyOptions): void {
+    const hold = this.faceHold;
+    this.faceHold = null;
+    if (hold && !hold.released) {
+      hold.members.delete(this);
+      hold.waiting.delete(this);
+      if (hold.waiting.size === 0) releaseFaceHold(hold);
+    }
     this.loadGeneration++;
     this.previewFlipGeneration += 1;
     this.previewFlip.cancel();
