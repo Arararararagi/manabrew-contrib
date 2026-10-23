@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.4](https://github.com/witchesofthehill/manabrew/compare/v3.64.3...v3.64.4) (2026-10-23)
+
+### Fixes
+
+* bug ([#1108](https://github.com/witchesofthehill/manabrew/issues/1108)) ([00ef493](https://github.com/witchesofthehill/manabrew/commit/00ef493b70ec6397dd323ba35aaf2473e17043e7))
+
 ## [3.64.3](https://github.com/witchesofthehill/manabrew/compare/v3.64.2...v3.64.3) (2026-10-22)
 
 ### Fixes
