@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.6](https://github.com/witchesofthehill/manabrew/compare/v3.64.5...v3.64.6) (2026-10-23)
+
+### Fixes
+
+* x targeting action space ([#1116](https://github.com/witchesofthehill/manabrew/issues/1116)) ([f690093](https://github.com/witchesofthehill/manabrew/commit/f69009369c303e14e6e702e2e44270d1965c8bbb))
+
 ## [3.64.5](https://github.com/witchesofthehill/manabrew/compare/v3.64.4...v3.64.5) (2026-10-23)
 
 ### Fixes
