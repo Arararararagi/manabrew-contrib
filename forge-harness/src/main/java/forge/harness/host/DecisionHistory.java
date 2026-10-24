@@ -10,7 +10,7 @@ final class DecisionHistory {
     private static final int MAX_BYTES = 64 * 1024 * 1024;
     private final String startRequest;
     private final JsonArray entries = new JsonArray();
-    private final JsonObject replay;
+    private JsonObject replay;
     private int replayIndex;
     private int bytes;
     private String unavailableReason;
@@ -35,7 +35,7 @@ final class DecisionHistory {
                 ? prefix.get(replayIndex).getAsJsonObject() : replay;
         GameCheckpoint.requireEqual(boundary.get("prompt"), JsonParser.parseString(prompt), "prompt", replayIndex + 1L);
         GameCheckpoint.requireEqual(boundary.get("verification"), verification, "state/RNG", replayIndex + 1L);
-        if (replayIndex == prefix.size()) return null;
+        if (replayIndex == prefix.size()) { replay = null; return null; }
         replayIndex++;
         return boundary.getAsJsonObject("action");
     }
@@ -50,7 +50,7 @@ final class DecisionHistory {
         entry.add("verification", verification);
         final int size = entry.toString().getBytes(StandardCharsets.UTF_8).length;
         if (entries.size() >= 50000 || size > MAX_BYTES - bytes) {
-            unavailableReason = "This game's rewind history has reached its memory limit.";
+            unavailableReason = "History recording reached its memory limit. Earlier decisions remain available.";
             return;
         }
         entries.add(entry);
@@ -66,7 +66,7 @@ final class DecisionHistory {
     }
 
     String rewind(final int sequence) {
-        if (unavailableReason != null || sequence < 1 || sequence > entries.size()) {
+        if (sequence < 1 || sequence > entries.size()) {
             throw new IllegalArgumentException("journal position is unavailable");
         }
         final JsonArray prefix = new JsonArray();

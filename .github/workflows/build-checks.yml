@@ -60,6 +60,9 @@ jobs:
               'scripts/harness.mjs',
               'scripts/engine-bench/forge-replay.mjs',
               'scripts/engine-bench/forge-rewind.mjs',
+              'scripts/engine-bench/forge-supervisor.test.mjs',
+              'scripts/engine-bench/forge-verification-benchmark.mjs',
+              'scripts/engine-bench/java/**',
               'scripts/engine-bench/forge-rewind-wasm.mjs',
               'scripts/engine-bench/forge-decision-journal.mjs',
               'scripts/engine-bench/journal-fixture.mjs',
@@ -781,6 +784,12 @@ jobs:
 
       - name: Verify replay snapshot restoration in fresh processes
         run: yarn test:forge-replay
+
+      - name: Verify supervisor lifecycle
+        run: yarn test:forge-supervisor
+
+      - name: Verify subprocess deadlines and rewind failure recovery
+        run: cargo test -p self-hosted-node --no-default-features --features java-forge --lib -- --test-threads=1
 
       - name: Verify journal rewind and failed replay recovery
         run: yarn test:forge-rewind

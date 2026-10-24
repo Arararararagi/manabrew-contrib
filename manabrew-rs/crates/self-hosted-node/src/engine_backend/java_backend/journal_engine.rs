@@ -95,7 +95,17 @@ impl JournalEngine {
     pub(super) fn rewind_if_requested(
         &self,
         session: &str,
-        cancel: &AtomicBool,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<Option<u32>, String> {
+        self.rewind_with(session, cancel, Self::spawn, Duration::from_secs(120))
+    }
+
+    fn rewind_with(
+        &self,
+        session: &str,
+        cancel: &Arc<AtomicBool>,
+        spawn: impl FnOnce() -> Result<Self, String>,
+        timeout: Duration,
     ) -> Result<Option<u32>, String> {
         let snapshot = self.call("getRewindRequest", session)?;
         if snapshot.is_empty() {
@@ -114,11 +124,16 @@ impl JournalEngine {
                 .and_then(|id| u32::try_from(id).ok())
                 .ok_or("rewind has no target prompt")?;
             request["replaySnapshot"] = snapshot;
-            let replacement = Self::spawn()?;
+            let deadline = Instant::now() + timeout;
+            let replacement = spawn()?;
+            {
+                let mut bridge = replacement.bridge.borrow_mut();
+                bridge.deadline = Some(deadline);
+                bridge.cancel = Some(Arc::clone(cancel));
+            }
             if replacement.start_game(&request.to_string())? != session {
                 return Err("rewind changed the game identity".to_string());
             }
-            let deadline = Instant::now() + Duration::from_secs(120);
             loop {
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     return Err("rewind cancelled".to_string());
@@ -132,6 +147,29 @@ impl JournalEngine {
                             .ok_or("no restored prompt")?,
                     )
                     .map_err(|error| format!("invalid restored prompt: {error}"))?;
+                    replacement.bridge.borrow_mut().remaining(deadline)?;
+                    let pending = {
+                        let mut source = self.bridge.borrow_mut();
+                        source.cancel = Some(Arc::clone(cancel));
+                        let result = source.call(
+                            &json!({"command": "getRewindRequest", "sessionId": session})
+                                .to_string(),
+                        );
+                        source.cancel = None;
+                        result?
+                    };
+                    if pending.is_empty() {
+                        return Err("rewind interrupted by a pending directive".into());
+                    }
+                    replacement.bridge.borrow_mut().remaining(deadline)?;
+                    if !self.bridge.borrow_mut().is_alive() {
+                        return Err("authoritative engine exited during rewind".into());
+                    }
+                    {
+                        let mut bridge = replacement.bridge.borrow_mut();
+                        bridge.deadline = None;
+                        bridge.cancel = None;
+                    }
                     self.bridge.swap(&replacement.bridge);
                     return Ok(prompt_id);
                 }
@@ -145,6 +183,12 @@ impl JournalEngine {
             Ok(prompt) => Ok(Some(prompt)),
             Err(error) => {
                 warn!(%error, "journal rewind failed; keeping the current game");
+                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    let mut bridge = self.bridge.borrow_mut();
+                    bridge.failed = true;
+                    let _ = bridge.child.kill();
+                    return Err("rewind cancelled".into());
+                }
                 self.call("resumeAfterFailedRewind", session)?;
                 Ok(None)
             }
@@ -255,4 +299,181 @@ pub(super) fn report_process_gc(process_id: u32, stats: Option<GcStats>) {
             .unwrap_or(0),
         0,
     );
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn engine(script: &str) -> JournalEngine {
+        let child = Command::new("python3")
+            .args(["-u", "-c", script])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        JournalEngine {
+            bridge: Rc::new(RefCell::new(SubprocessBridge::from_child(child).unwrap())),
+        }
+    }
+
+    fn source() -> JournalEngine {
+        engine(
+            r#"import sys,json
+resumed=False
+snapshot=json.dumps({'journal':{'startRequest':'{}'},'prompt':{'promptId':1}})
+for line in sys.stdin:
+ command=json.loads(line)['command']
+ if command=='resumeAfterFailedRewind': resumed=True
+ result=snapshot if command=='getRewindRequest' else ('resumed' if resumed else 'frozen')
+ print(json.dumps({'ok':True,'result':result}),flush=True)
+"#,
+        )
+    }
+
+    #[test]
+    fn hung_and_crashed_replacements_leave_source_usable() {
+        for operation in ["startGame", "replayReady", "getSnapshot", "getPrompt"] {
+            for crash in [false, true] {
+                let source = source();
+                let original_pid = source.bridge.borrow().child.id();
+                let replacement = engine(&format!(
+                    r#"import sys,json,time
+for line in sys.stdin:
+ command=json.loads(line)['command']
+ if command=={operation:?}:
+  if {crash}: sys.exit(9)
+  time.sleep(60)
+ result={{'startGame':'{{"sessionId":"game","playerIndexes":[0,1]}}','replayReady':'true','getSnapshot':{view:?}}}.get(command,'false')
+ print(json.dumps({{'ok':True,'result':result}}),flush=True)
+"#,
+                    crash = if crash { "True" } else { "False" },
+                    view = serde_json::to_string(&GameViewDto::default()).unwrap()
+                ));
+                let pid = replacement.bridge.borrow().child.id();
+                let start = Instant::now();
+                let cancel = Arc::new(AtomicBool::new(false));
+                assert!(source
+                    .rewind_with(
+                        "game",
+                        &cancel,
+                        || Ok(replacement),
+                        Duration::from_millis(150)
+                    )
+                    .unwrap()
+                    .is_none());
+                assert_eq!(source.bridge.borrow().child.id(), original_pid);
+                assert_eq!(source.call("submitAction", "game").unwrap(), "resumed");
+                assert!(start.elapsed() < Duration::from_secs(3));
+                if !crash {
+                    assert!(
+                        start.elapsed() >= Duration::from_millis(140),
+                        "did not reach {operation}"
+                    );
+                }
+                assert!(!Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .stderr(Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success());
+            }
+        }
+    }
+
+    fn ready_candidate() -> JournalEngine {
+        let view = serde_json::to_string(&GameViewDto::default()).unwrap();
+        let prompt = r#"{"promptId":1,"decidingPlayerId":"player-0","input":{"type":"mulligan","handCardIds":[],"mulliganCount":0}}"#;
+        engine(&format!(
+            r#"import sys,json
+snapshot=json.dumps({{'journal':{{'startRequest':'{{}}'}},'prompt':{{'promptId':1}}}})
+for line in sys.stdin:
+ command=json.loads(line)['command']
+ result={{'startGame':'{{"sessionId":"game","playerIndexes":[0,1]}}','replayReady':'true','getSnapshot':{view:?},'getPrompt':{prompt:?},'getRewindRequest':snapshot}}.get(command,'ok')
+ print(json.dumps({{'ok':True,'result':result}}),flush=True)
+"#
+        ))
+    }
+
+    #[test]
+    fn consecutive_promotions_reap_previous_authority() {
+        let source = source();
+        let cancel = Arc::new(AtomicBool::new(false));
+        for _ in 0..3 {
+            let old = source.bridge.borrow().child.id();
+            let candidate = ready_candidate();
+            let new = candidate.bridge.borrow().child.id();
+            assert_eq!(
+                source
+                    .rewind_with("game", &cancel, || Ok(candidate), Duration::from_secs(2))
+                    .unwrap(),
+                Some(1)
+            );
+            assert_eq!(source.bridge.borrow().child.id(), new);
+            assert!(source.bridge.borrow().deadline.is_none());
+            assert_eq!(source.call("submitAction", "game").unwrap(), "ok");
+            assert!(!Command::new("kill")
+                .args(["-0", &old.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success());
+        }
+    }
+
+    #[test]
+    fn source_failure_during_reconstruction_never_promotes_candidate() {
+        let source = source();
+        let old = source.bridge.borrow().child.id();
+        let candidate = ready_candidate();
+        let new = candidate.bridge.borrow().child.id();
+        let cancel = Arc::new(AtomicBool::new(false));
+        assert!(source
+            .rewind_with(
+                "game",
+                &cancel,
+                || {
+                    source.bridge.borrow_mut().child.kill().unwrap();
+                    Ok(candidate)
+                },
+                Duration::from_secs(2)
+            )
+            .is_err());
+        assert_eq!(source.bridge.borrow().child.id(), old);
+        assert!(!Command::new("kill")
+            .args(["-0", &new.to_string()])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+    }
+
+    #[test]
+    fn termination_during_reconstruction_reaps_both_processes() {
+        let source = source();
+        let source_pid = source.bridge.borrow().child.id();
+        let candidate = engine("import time; time.sleep(60)");
+        let candidate_pid = candidate.bridge.borrow().child.id();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&cancel);
+        let trigger = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            signal.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+        assert!(source
+            .rewind_with("game", &cancel, || Ok(candidate), Duration::from_secs(2))
+            .unwrap_err()
+            .contains("cancelled"));
+        drop(source);
+        trigger.join().unwrap();
+        for pid in [source_pid, candidate_pid] {
+            assert!(!Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success());
+        }
+    }
 }

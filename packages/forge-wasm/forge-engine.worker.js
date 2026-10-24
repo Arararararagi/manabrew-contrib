@@ -27,8 +27,21 @@ function supervise(command) {
   let active;
   let candidate;
   let timer;
+  let ended = false;
+  let started = false;
+  let directiveLanes;
+  const stop = () => {
+    ended = true;
+    clearTimeout(timer);
+    candidate?.worker.terminate();
+    active?.worker.terminate();
+    candidate = active = null;
+    if (!started) postError(command.requestId, "Game ended before startup completed.");
+    started = true;
+  };
 
   const fail = (message) => {
+    if (ended) return;
     candidate?.worker.terminate();
     candidate = null;
     clearTimeout(timer);
@@ -38,22 +51,23 @@ function supervise(command) {
   };
 
   const launch = (snapshot) => {
-    const worker = new Worker(self.location.href);
     const control = new SharedArrayBuffer(4);
     const promptOffset = snapshot
       ? active.promptOffset + snapshot.lastPromptId + 1 - snapshot.prompt.promptId
       : 0;
+    const worker = new Worker(self.location.href);
     const instance = { worker, control, buffered: [], promptOffset };
     if (snapshot) candidate = instance;
     else active = instance;
     worker.onerror = (event) => {
       if (instance === candidate) fail(event.message);
       else if (instance === active) {
+        stop();
         postEvent("game:forced_end", { reason: "worker_error", message: event.message });
       }
     };
     worker.onmessage = ({ data }) => {
-      if (instance !== active && instance !== candidate) return;
+      if (ended || (instance !== active && instance !== candidate)) return;
       if (data.type === "event" && data.event === "worker:init") {
         worker.postMessage({
           ...command,
@@ -63,6 +77,7 @@ function supervise(command) {
             rewindControl: control,
             promptOffset,
             replaySnapshot: snapshot,
+            rewindDirectiveLanes: snapshot ? directiveLanes : undefined,
           },
         });
         return;
@@ -85,7 +100,9 @@ function supervise(command) {
           active.worker.terminate();
           active = instance;
           candidate = null;
-          for (const message of instance.buffered) self.postMessage(message);
+          for (const message of instance.buffered) {
+            if (message.event !== "game:directive_lanes") self.postMessage(message);
+          }
           instance.buffered = [];
           Atomics.store(new Int32Array(control), 0, 2);
           Atomics.notify(new Int32Array(control), 0);
@@ -94,6 +111,12 @@ function supervise(command) {
         }
         return;
       }
+      if (data.type === "response" && data.requestId === command.requestId) {
+        started = true;
+        if (data.error) stop();
+      }
+      if (data.event === "game:directive_lanes") directiveLanes = data.payload;
+      if (data.event === "game:forced_end" || data.event === "game:over") stop();
       if (data.event !== "forge:journal") self.postMessage(data);
     };
     return instance;
@@ -106,14 +129,19 @@ function supervise(command) {
     return;
   }
   self.onmessage = ({ data }) => {
+    if (data?.type !== "command") return;
     if (data.command === "end_game") {
-      clearTimeout(timer);
-      candidate?.worker.terminate();
-      active.worker.terminate();
-      candidate = null;
+      stop();
       postResponse(data.requestId, null);
+    } else if (ended) {
+      postError(data.requestId, "Game has ended.");
+    } else if (["respond", "get_prompt", "get_game_view"].includes(data.command)) {
+      // Gameplay uses SABs. The leaf's event loop is blocked for the entire game.
+      postResponse(data.requestId, null);
+    } else if (["wasm_init", "ensure_card_data"].includes(data.command)) {
+      postResponse(data.requestId, "ok");
     } else {
-      active.worker.postMessage(data);
+      postError(data.requestId, `Forge cannot handle ${data.command} while a game is active.`);
     }
   };
 }
@@ -209,12 +237,11 @@ function gameSeed(args) {
   return Number.isInteger(seed) && seed > 0 ? seed % 2147483647 : Date.now() % 2147483647;
 }
 
-function shareDirectiveLanes(seatCount, localSeat) {
-  const buffers = Array.from(
-    { length: seatCount },
-    () => new SharedArrayBuffer(DIRECTIVE_LANE_BYTES),
-  );
-  const hostBuffer = new SharedArrayBuffer(DIRECTIVE_LANE_BYTES);
+function shareDirectiveLanes(seatCount, localSeat, retained) {
+  const buffers =
+    retained?.buffers ??
+    Array.from({ length: seatCount }, () => new SharedArrayBuffer(DIRECTIVE_LANE_BYTES));
+  const hostBuffer = retained?.hostBuffer ?? new SharedArrayBuffer(DIRECTIVE_LANE_BYTES);
   self.__forgeDirectiveLanes = buffers;
   self.__forgeHostLane = hostBuffer;
   postEvent("game:directive_lanes", { buffers, hostBuffer, localSeat });
@@ -250,7 +277,7 @@ async function startGame(requestId, args) {
   seatBuffers.slice(1).forEach((buffer, index) => {
     postEvent("game:remote_sab", { buffer, playerSlot: `player-${index + 1}` });
   });
-  shareDirectiveLanes(seatBuffers.length, 0);
+  shareDirectiveLanes(seatBuffers.length, 0, args.rewindDirectiveLanes);
   postResponse(requestId, "game-started");
 
   const variant = forgeVariant(humanDeck);
@@ -349,7 +376,7 @@ async function startMultiplayerGame(requestId, args) {
     if (index === localPlayerIndex) return;
     postEvent("game:remote_sab", { buffer, playerSlot: `player-${index}` });
   });
-  shareDirectiveLanes(seatBuffers.length, localPlayerIndex);
+  shareDirectiveLanes(seatBuffers.length, localPlayerIndex, args.rewindDirectiveLanes);
   postResponse(requestId, "multiplayer-started");
 
   const variant = forgeVariant(decks[0]);

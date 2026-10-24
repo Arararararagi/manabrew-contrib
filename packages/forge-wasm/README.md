@@ -98,7 +98,9 @@ Call `dispose()` to terminate the worker. A running Forge game is synchronous in
 
 ## Experimental engine decision journal
 
-`decisionJournal: true` emits `forge:journal` v2 batches (`ForgeDecisionJournalBatch`) through `onEvent`: the exact start request as a string, then each consumed input with its sequence, seat, prompt and state/RNG verification witness. Snapshot restoration currently uses the threaded JVM harness API; this package exposes capture only. Batches hold hidden information, so keep them with trusted hosts. Overflow or a snapshot restore sets a permanent `unavailableReason`.
+`decisionJournal: true` emits `forge:journal` v2 batches (`ForgeDecisionJournalBatch`) through `onEvent`: the exact start request as a string, then each consumed input with its sequence, seat, prompt and state/RNG verification witness. Raw snapshot export/import uses the threaded JVM harness API. Batches hold hidden information, so keep them with trusted hosts. Overflow or a snapshot restore sets a permanent `unavailableReason`.
+
+`journalRewind: true` keeps that private history inside a supervisor and exposes redacted decision positions through `gameView.decisionHistory` and `gameView.checkpoints`. Restore directives require the active human seats' votes. A replacement engine replays and verifies the selected boundary before promotion; failure resumes the original. Directive lanes survive promotion, while prompt IDs advance. The 64 MiB / 50,000-entry limit stops further recording without invalidating retained positions. This mode requires external decision makers and does not emit raw `forge:journal` events.
 
 ## Types
 

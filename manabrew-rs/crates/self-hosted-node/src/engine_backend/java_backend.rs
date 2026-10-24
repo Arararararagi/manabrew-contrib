@@ -7,7 +7,7 @@ use std::env;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 #[cfg(forge_backend)]
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc as std_mpsc;
 #[cfg(forge_backend)]
@@ -2742,8 +2742,13 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 #[cfg(forge_backend)]
 pub struct SubprocessBridge {
     child: Child,
-    stdin: BufWriter<ChildStdin>,
-    stdout_rx: std_mpsc::Receiver<String>,
+    stdin_tx: Option<std_mpsc::Sender<String>>,
+    stdin_rx: std_mpsc::Receiver<Result<(), String>>,
+    stdin_handle: Option<std::thread::JoinHandle<()>>,
+    stdout_rx: Option<std_mpsc::Receiver<String>>,
+    deadline: Option<Instant>,
+    cancel: Option<Arc<AtomicBool>>,
+    failed: bool,
     stdout_handle: Option<std::thread::JoinHandle<()>>,
     stderr_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -2790,6 +2795,23 @@ impl SubprocessBridge {
             .take()
             .ok_or_else(|| "java subprocess has no stdout".to_string())?;
         let stderr = child.stderr.take();
+
+        let (stdin_tx, requests) = std_mpsc::channel::<String>();
+        let (written, stdin_rx) = std_mpsc::channel();
+        let stdin_handle = std::thread::spawn(move || {
+            let mut stdin = BufWriter::new(stdin);
+            for request in requests {
+                let result = stdin
+                    .write_all(request.as_bytes())
+                    .and_then(|_| stdin.write_all(b"\n"))
+                    .and_then(|_| stdin.flush())
+                    .map_err(|error| format!("failed to write subprocess stdin: {error}"));
+                let failed = result.is_err();
+                if written.send(result).is_err() || failed {
+                    break;
+                }
+            }
+        });
 
         // Bounded so a chatty Java side can't grow the queue without bound.
         // Cap is generous — protocol replies are one line per request.
@@ -2838,72 +2860,91 @@ impl SubprocessBridge {
 
         Ok(Self {
             child,
-            stdin: BufWriter::new(stdin),
-            stdout_rx,
+            stdin_tx: Some(stdin_tx),
+            stdin_rx,
+            stdin_handle: Some(stdin_handle),
+            stdout_rx: Some(stdout_rx),
+            deadline: None,
+            cancel: None,
+            failed: false,
             stdout_handle: Some(stdout_handle),
             stderr_handle: Some(stderr_handle),
         })
     }
 
     fn call(&mut self, request_json: &str) -> Result<String, String> {
-        // Drain anything still queued from a prior request — a previous call()
-        // that timed out may have left its reply in the channel, and consuming
-        // it now would shift every subsequent call off-by-one.
+        if self.failed {
+            return Err("subprocess transport is closed".into());
+        }
+        let deadline = self
+            .deadline
+            .unwrap_or_else(|| Instant::now() + CALL_TIMEOUT)
+            .min(Instant::now() + CALL_TIMEOUT);
+        let result = self.exchange(request_json, deadline);
+        // A timed-out RPC has no request ID. Reusing the stream could accept its
+        // late reply as the next result, so any transport failure kills it.
+        if self.failed {
+            let _ = self.child.kill();
+        }
+        result
+    }
+
+    fn remaining(&mut self, deadline: Instant) -> Result<Duration, String> {
+        if self
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.load(std::sync::atomic::Ordering::Relaxed))
+        {
+            self.failed = true;
+            return Err("subprocess RPC cancelled".into());
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            self.failed = true;
+            return Err("subprocess RPC timed out".into());
+        }
+        Ok(remaining.min(Duration::from_millis(20)))
+    }
+
+    fn exchange(&mut self, request_json: &str, deadline: Instant) -> Result<String, String> {
+        self.remaining(deadline)?;
+        if self
+            .stdin_tx
+            .as_ref()
+            .unwrap()
+            .send(request_json.to_owned())
+            .is_err()
+        {
+            self.failed = true;
+            return Err("subprocess closed stdin".into());
+        }
         loop {
-            match self.stdout_rx.try_recv() {
-                Ok(stale) => {
-                    debug!(target: "self_hosted_node::java", line = %stale, "discarding stale stdout line");
-                }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    return Err("java subprocess closed stdout (crashed?)".to_string());
+            let remaining = self.remaining(deadline)?;
+            match self.stdin_rx.recv_timeout(remaining) {
+                Ok(Ok(())) => break,
+                Err(RecvTimeoutError::Timeout) => continue,
+                result => {
+                    self.failed = true;
+                    return Err(format!("subprocess stdin failed: {result:?}"));
                 }
             }
         }
-
-        self.stdin
-            .write_all(request_json.as_bytes())
-            .map_err(|err| format!("failed to write subprocess stdin: {err}"))?;
-        self.stdin
-            .write_all(b"\n")
-            .map_err(|err| format!("failed to write subprocess newline: {err}"))?;
-        self.stdin
-            .flush()
-            .map_err(|err| format!("failed to flush subprocess stdin: {err}"))?;
-
-        let deadline = Instant::now() + CALL_TIMEOUT;
         loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Err(format!(
-                    "java subprocess timed out after {}s",
-                    CALL_TIMEOUT.as_secs()
-                ));
-            }
-            match self.stdout_rx.recv_timeout(remaining) {
-                Ok(line) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        continue;
+            let remaining = self.remaining(deadline)?;
+            match self.stdout_rx.as_ref().unwrap().recv_timeout(remaining) {
+                Ok(line) => match serde_json::from_str::<SubprocessReply>(line.trim()) {
+                    Ok(reply) if reply.ok => return Ok(reply.result),
+                    Ok(reply) => {
+                        return Err(reply.error.unwrap_or_else(|| "unknown engine error".into()))
                     }
-                    match serde_json::from_str::<SubprocessReply>(trimmed) {
-                        Ok(reply) if reply.ok => return Ok(reply.result),
-                        Ok(reply) => {
-                            return Err(reply.error.unwrap_or_else(|| "unknown java error".into()));
-                        }
-                        Err(_) => {
-                            debug!(target: "self_hosted_node::java", line = trimmed, "non-protocol stdout line");
-                        }
+                    Err(_) => {
+                        debug!(target: "self_hosted_node::java", line, "non-protocol stdout line")
                     }
-                }
-                Err(RecvTimeoutError::Timeout) => {
-                    return Err(format!(
-                        "java subprocess timed out after {}s",
-                        CALL_TIMEOUT.as_secs()
-                    ));
-                }
+                },
+                Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => {
-                    return Err("java subprocess closed stdout (crashed?)".to_string());
+                    self.failed = true;
+                    return Err("subprocess closed stdout (crashed?)".into());
                 }
             }
         }
@@ -2918,29 +2959,13 @@ impl SubprocessBridge {
     }
 
     fn shutdown(mut self) {
-        let _ = self.stdin.write_all(b"{\"command\":\"quit\"}\n");
-        let _ = self.stdin.flush();
+        if let Some(stdin) = self.stdin_tx.take() {
+            let _ = stdin.send("{\"command\":\"quit\"}".into());
+        }
         let deadline = Instant::now() + SHUTDOWN_GRACE;
-        loop {
-            match self.child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if Instant::now() >= deadline => {
-                    let _ = self.child.kill();
-                    let _ = self.child.wait();
-                    break;
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
-                Err(_) => break,
-            }
+        while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
         }
-        if let Some(handle) = self.stdout_handle.take() {
-            let _ = handle.join();
-        }
-        if let Some(handle) = self.stderr_handle.take() {
-            let _ = handle.join();
-        }
-        #[cfg(feature = "graal-forge")]
-        journal_engine::report_process_gc(self.child.id(), None);
     }
 }
 
@@ -3018,6 +3043,12 @@ impl Drop for SubprocessBridge {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        self.stdin_tx.take();
+        // Disconnect before joining: the bounded stdout sender may be full.
+        self.stdout_rx.take();
+        if let Some(handle) = self.stdin_handle.take() {
+            let _ = handle.join();
+        }
         if let Some(handle) = self.stdout_handle.take() {
             let _ = handle.join();
         }
@@ -3334,7 +3365,10 @@ mod gc_log_tests {
         let json = request.to_json().expect("serialized");
 
         assert!(json.contains(
-            r#""deck":[{"name":"Forest","setCode":"EOE","collectorNumber":"266","foil":true}]"#
+            r#""deck":[{"name":"Forest","setCode":"EOE","collectorNumber":"266","foil":true,"commander":false}]"#
         ));
     }
 }
+
+#[cfg(all(test, unix, forge_backend))]
+mod subprocess_tests;

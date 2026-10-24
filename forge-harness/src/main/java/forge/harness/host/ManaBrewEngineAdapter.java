@@ -580,6 +580,9 @@ public final class ManaBrewEngineAdapter {
         if (request.journalCommitBarrier && request.journalStart == null) {
             throw new IllegalArgumentException("journal commit barrier requires decisionJournal");
         }
+        if (request.journalRewind && request.journalCommitBarrier) {
+            throw new IllegalArgumentException("journal rewind owns delivery and cannot use an external commit barrier");
+        }
         if (request.journalRewind && request.journalStart == null) {
             throw new IllegalArgumentException("journal rewind requires decisionJournal");
         }

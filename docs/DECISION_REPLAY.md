@@ -32,7 +32,7 @@ not reproducible through this protocol.
 
 `DecisionHistory` retains the complete canonical prefix in engine memory, bounded
 by 50,000 entries or 64 MiB, while publishing only the latest 200 positions. Hitting
-the bound disables rewind with a visible reason; gameplay continues. This is not
+the bound stops recording with a visible reason; retained positions remain usable and gameplay continues. This is not
 durable storage: closing the host loses the history. Journaling never calls
 `GameSnapshot`; ordinary rule actions are reconstructed by executing Forge.
 
@@ -46,16 +46,89 @@ prompt. Vote messages are host orchestration and are excluded from the input log
 
 - Browser and WebView: a supervisor worker replaces its engine child worker only
   after `forge:replay_ready`. Candidate SABs are withheld until verification;
-  private `forge:journal` payloads never leave the supervisor.
+  private `forge:journal` payloads never leave the supervisor. Directive lanes are
+  retained across promotion, including pending UI queues. Prompt responses belong
+  to their original timeline. The supervisor answers control requests itself
+  because the engine child's event loop is blocked; ending the game or losing the
+  source terminates the candidate too.
 - Native desktop and hosted node: one child process per game runs the same
   executable with `--forge-engine-worker`, using the bundled native library.
   This also satisfies G1's one-isolate-per-process restriction.
 - JVM node: one fresh harness process per game and per rewind candidate.
 
+Reconstruction has a 120-second budget from before startup, including all candidate
+RPC writes and reads. Individual subprocess RPCs also have a 60-second deadline;
+cancellation is polled every 20 ms. A transport timeout closes that process rather
+than reusing an uncorrelated late response. Failed candidates are killed and reaped
+before the source resumes. A non-restore directive already queued in the native
+source cancels reconstruction, so it is consumed by the original game.
+
+Interactive rewind owns journal delivery and rejects `decisionJournalCommitBarrier`;
+the externally acknowledged foundation API retains its startup/decision barriers.
+
+Threaded engines publish immutable spectator and seat snapshots on the game thread
+before exposing each prompt or state revision, and before reporting game over.
+RPC reads use these published views: traversing live Forge zones concurrently with
+advancement or concession can throw `ConcurrentModificationException` and end the
+authoritative game. Single-threaded WebImage reads remain synchronous.
+
 Rewind temporarily holds two engines and their card databases. Capacity planning
 must account for this peak; shared-isolate/JVM multiplexing settings no longer
 apply to hosted gameplay. No relay ownership, crash takeover, durable saved-game
 import, or cross-artifact migration is introduced.
+
+## Verification cost and hardening regression
+
+Measured on macOS/aarch64, JDK 18, 1 GiB fixed heap, 2026-10-24. Run
+`yarn bench:forge-verification --java-home "$JAVA_HOME"` after building the harness.
+The fixture parks a real four-player Commander engine at a prompt, with four
+100-card decks, then adds Memnite permanents evenly across the four battlefields.
+These are controlled board-size fixtures, not timings from naturally played games.
+Each board uses 20 paired warmups and 100 alternating samples per implementation.
+Allocation uses `ThreadMXBean` bytes allocated by the measuring thread per call;
+it is allocation traffic, not retained heap or process RSS.
+
+| Total permanents | Before median / p95 (ms) | After median / p95 (ms) | Before / after allocated bytes |
+| ---------------- | ------------------------ | ----------------------- | ------------------------------ |
+| 0                | 3.538 / 4.080            | 2.068 / 2.776           | 4,960,160 / 2,505,232          |
+| 40               | 13.543 / 14.438          | 6.797 / 7.383           | 20,202,672 / 9,274,400         |
+| 160              | 43.162 / 45.798          | 21.010 / 22.501         | 67,679,568 / 30,753,072        |
+| 320              | 84.670 / 90.088          | 41.926 / 44.623         | 131,005,936 / 59,413,408       |
+
+The optimization builds verification views directly and copies sorted JSON members
+without repeatedly serializing subtrees. All spectator/player projections, ordered
+hidden-zone identities, and the RNG witness remain. The benchmark asserts identical
+witnesses before and after on every sample. Replay reuses the witness checked just
+before consuming the same input instead of extracting it twice. Large boards still
+allocate substantially; these numbers do not establish browser/native latency.
+
+`yarn test:forge-supervisor` covers request settlement, consecutive promotions,
+source/candidate failures, cancellation, timeout, and retained directive queues.
+`JournalHardeningTest` runs with the harness build and covers both history caps,
+seat metadata, prompt/RNG divergence and incompatible delivery modes. Rust
+`journal_engine::tests` and `subprocess_tests` exercise hanging/exiting children,
+blocked stdin, full stdout queues, failure recovery and process reaping.
+`SnapshotConcurrencyTest` reads spectator and two seat views concurrently through startup,
+100 decisions and a concession; it reproduced the live-zone traversal race.
+The JVM/native and real WebImage rewind scripts cover continuation, rejection,
+queued concede, stale responses and nested directives claiming another seat. Browser
+response directives are bound to the sending seat. Network responses cannot use
+prompt ID zero, which is reserved for in-process absent-player defaults.
+Linux/Windows process teardown and actual browser/WebView lifecycle still require
+their platform CI/manual validation.
+
+The hardening rerun passed all 22 relay/native-Forge networking cases in 231 seconds,
+including concession while observing bots and journal rewind followed by resync.
+The default Rust backend also passed its 21 networking cases. Supervisor tests passed
+7/7, and subprocess/host library tests passed 26/26 under each of `java-forge` and
+`graal-forge`. Harness, native-image, WebImage, TypeScript and desktop `forge-room`
+builds passed. Targeted ESLint and dependency-excluding Clippy passed; the full
+Clippy invocation remains blocked by an existing `nonminimal_bool` warning in
+`forge-foundation/src/sealed_product/card_cosmetics.rs:853`.
+All six fresh-JVM replay scenarios passed again after the snapshot concurrency fix,
+including four-player Commander, hidden choices, stack responses, RNG/coin flips and
+the 1,012-input long game. JVM/native rewind, real WebImage rewind and retained
+journal acknowledgement/commit-barrier regressions also passed.
 
 ## Four separate responsibilities
 
@@ -250,6 +323,8 @@ executes the built WebImage through the Node worker shim, replaces workers twice
 checks monotonic prompt IDs and continues play. It is not a browser UI check.
 The networking regression `journal_rewind_keeps_the_room_and_resumes_play` exercises
 the real relay, external bot and node, including resync after rewind.
+Set `REGRESSION_NODE_ENGINE_BACKEND=forge` when running this suite; the default
+selects the Rust engine and omits the journal rewind case.
 CI runs the JVM probes whenever the Forge/harness job is selected, including fork bumps.
 
 ## Interactive rewind evidence (2026-10-24)

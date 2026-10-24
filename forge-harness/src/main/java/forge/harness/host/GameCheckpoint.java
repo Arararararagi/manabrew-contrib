@@ -1,6 +1,5 @@
 package forge.harness.host;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -19,7 +18,6 @@ import java.util.HexFormat;
 import java.util.TreeMap;
 
 final class GameCheckpoint {
-    private static final Gson GSON = new Gson();
     private static final long STEP_TIMEOUT_NANOS = 30_000_000_000L;
 
     private GameCheckpoint() {}
@@ -28,7 +26,7 @@ final class GameCheckpoint {
         final JsonObject state = new JsonObject();
         final JsonArray views = new JsonArray();
         for (int seat = -1; seat < session.getGame().getRegisteredPlayers().size(); seat++) {
-            final JsonObject view = JsonParser.parseString(session.getSnapshotJson(seat)).getAsJsonObject();
+            final JsonObject view = session.verificationView(seat);
             view.remove("checkpoints");
             view.remove("restoreVote");
             view.remove("snapshotRecording");
@@ -158,6 +156,10 @@ final class GameCheckpoint {
                     || !entry.has("verification") || !entry.has("prompt") || !entry.has("action")) {
                 throw new IllegalArgumentException("invalid journal entry at decision " + sequence);
             }
+            final int player = new java.math.BigDecimal(entry.get("playerIndex").getAsString()).intValueExact();
+            if (player < 0 || !entry.getAsJsonObject("prompt").get("decidingPlayerId").getAsString().equals("player-" + player)) {
+                throw new IllegalArgumentException("journal player mismatch at decision " + sequence);
+            }
         }
     }
 
@@ -231,7 +233,9 @@ final class GameCheckpoint {
         if (value.isJsonObject()) {
             final TreeMap<String, JsonElement> sorted = new TreeMap<>();
             value.getAsJsonObject().entrySet().forEach(entry -> sorted.put(entry.getKey(), canonical(entry.getValue())));
-            return GSON.toJsonTree(sorted);
+            final JsonObject object = new JsonObject();
+            sorted.forEach(object::add);
+            return object;
         }
         if (value.isJsonArray()) {
             final JsonArray array = new JsonArray();

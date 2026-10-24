@@ -19,6 +19,8 @@ Dependency rule (do not violate): `parity → common`, `host → common`, `Main 
 
 ### Replay snapshots
 
+Threaded host snapshot RPCs read immutable seat views published by the game thread before prompts/revisions and final game over. Do not traverse live Forge zones from RPC threads: concession and advancement mutate them concurrently. Verification runs on the game thread; WebImage remains single-threaded.
+
 `GameCheckpoint` exports a collected journal prefix plus verification at a pending decision and restores it by full execution replay. It never applies Forge `GameState`. See `docs/DECISION_REPLAY.md` for the API and limits. `DecisionHistory` retains the private complete input prefix for interactive `journalRewind`, publishes redacted decision categories in `checkpoints`, and verifies replay in a fresh worker/process. `EngineCommands` shares threaded JVM/native command dispatch. Rewind directives are orchestration and never journal inputs. The legacy `GameSnapshot` path remains only when journal rewind is disabled and invalidates delivery journals.
 
 ### Host payability probes must stay silent
@@ -160,3 +162,5 @@ Web Image's `Throwable.getStackTrace()` can return only the entry point (`WasmMa
 The direct `build-wasm.sh` build reads `forge/forge-gui/res/languages` outside `FORGE_ASSETS`; with an empty submodule it compiles but fails at runtime, so put a languages directory on the classpath.
 
 Journal mode requires an isolated engine process: Forge's global IDs and caches are not per-session. Snapshot export runs on the game thread, queued with inputs; acknowledge any outstanding commit barrier before exporting. Seed the construction thread as well as the execution thread. Name threaded engines `Game-*` so Forge `GameAction.invoke` stays on the seeded thread.
+
+Interactive `journalRewind` owns drained delivery and rejects an external commit barrier. Its 64 MiB / 50,000-entry recording cap preserves previously retained rewind positions. Validate recorded seat metadata against the canonical prompt. Verification must preserve every viewer projection, hidden zone ordering and RNG position; `yarn bench:forge-verification` compares the original implementation with identical-witness assertions.

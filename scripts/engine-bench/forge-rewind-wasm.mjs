@@ -7,6 +7,7 @@ let latestView;
 let approvedVote = 0;
 let highestPrompt = 0;
 let error;
+let staleErrors = 0;
 const bySeat = new Map();
 const inputs = new Map();
 const engine = new ForgeEngine({
@@ -29,7 +30,8 @@ const engine = new ForgeEngine({
     prompts.push({ prompt, slot, view });
   },
   onError: (cause) => {
-    error = cause;
+    if (cause?.code === "stalePrompt") staleErrors++;
+    else error = cause;
   },
   onEvent: (name, payload) => {
     if (name === "game:forced_end") error = new Error(payload.message);
@@ -62,6 +64,27 @@ try {
     snapshotRecording: false,
   });
   while ((latestView?.checkpoints.at(-1)?.checkpointId ?? 0) < 80) await answerNext();
+  await until(() => prompts.length > 0);
+  const injected = prompts.shift();
+  const authenticatedSeat = injected.slot === "local" ? 0 : 1;
+  const claimedSeat = 1 - authenticatedSeat;
+  engine.respond(
+    injected.prompt.promptId,
+    {
+      type: "directive",
+      player: claimedSeat,
+      directive: { type: "requestRestore", checkpointId: 24 },
+    },
+    injected.slot,
+  );
+  await until(() => latestView.restoreVote?.status.type === "pending");
+  assert.equal(latestView.restoreVote.requestedByPlayerId, `player-${authenticatedSeat}`);
+  engine.directive(
+    { type: "restoreVote", voteId: latestView.restoreVote.voteId, accept: false },
+    claimedSeat === 0 ? "local" : "player-1",
+  );
+  await until(() => latestView.restoreVote.status.type === "declined");
+  console.log(JSON.stringify({ nestedDirectiveCannotImpersonateAnotherSeat: true }));
   for (const target of [24, 4]) {
     const oldHighest = highestPrompt;
     const oldVote = latestView.restoreVote?.voteId ?? 0;
@@ -78,6 +101,30 @@ try {
     for (let index = 0; index < 8; index++) await answerNext();
     console.log(JSON.stringify({ runtime: "wasm", target, continued: 8 }));
   }
+  await until(() => prompts.length > 0);
+  const pending = prompts.shift();
+  engine.respond(
+    pending.prompt.promptId - 1,
+    scriptedAnswer({ prompt: pending.prompt }),
+    pending.slot,
+  );
+  await until(() => staleErrors === 1 && prompts.length > 0);
+  const oldVote = latestView.restoreVote.voteId;
+  engine.directive({ type: "requestRestore", checkpointId: 4 });
+  await until(() => latestView.restoreVote.voteId > oldVote);
+  const vote = latestView.restoreVote;
+  engine.directive({ type: "restoreVote", voteId: vote.voteId, accept: true }, "player-1");
+  await until(() => latestView.decisionHistory.rewinding);
+  const other = pending.slot === "local" ? "player-1" : "local";
+  engine.directive({ type: "concede" }, other);
+  await until(() => latestView?.gameOver);
+  console.log(
+    JSON.stringify({
+      staleResponseRejected: true,
+      directivePollingAfterStaleResponse: true,
+      queuedConcedeSurvivesPromotion: true,
+    }),
+  );
 } finally {
   engine.dispose();
 }

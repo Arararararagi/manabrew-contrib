@@ -212,18 +212,22 @@ public final class SabTransport implements InteractiveBridge {
             openSeat = seat;
             openPrompt = promptJson;
         }
-        while (!awaitAnswer(seat, LANE_POLL_MS)) {
-            final int lane = fullDirectiveLane();
-            if (lane >= 0) {
-                final JsonObject message = new JsonObject();
-                message.add("directive", JsonParser.parseString(takeDirective(lane)));
-                return decodeMessage(lane == hostDirectiveLane() ? HOST_SEAT : lane, message);
+        JsonObject message;
+        while (true) {
+            while (!awaitAnswer(seat, LANE_POLL_MS)) {
+                final int lane = fullDirectiveLane();
+                if (lane >= 0) {
+                    final JsonObject directive = new JsonObject();
+                    directive.add("directive", JsonParser.parseString(takeDirective(lane)));
+                    return decodeMessage(lane == hostDirectiveLane() ? HOST_SEAT : lane, directive);
+                }
             }
+            message = readResponse(seat, promptJson);
+            if (message != null) break;
         }
         openPrompt = null;
         openSeat = -1;
 
-        final JsonObject message = readResponse(seat, promptJson);
         if (bot) {
             botMsSinceRecv += System.currentTimeMillis() - botStartedAt;
         } else {
@@ -295,7 +299,8 @@ public final class SabTransport implements InteractiveBridge {
         }
         String result = null;
         for (int seat = 0; seat < seats; seat++) {
-            final JsonObject message = readResponse(seat, promptJson);
+            JsonObject message;
+            do { message = readResponse(seat, promptJson); } while (message == null);
             if (result == null || message.has("directive")) {
                 result = decodeMessage(seat, message);
             }
@@ -308,7 +313,7 @@ public final class SabTransport implements InteractiveBridge {
 
     private static String decodeMessage(final int seat, final JsonObject message) {
         if (message.has("action")) {
-            return message.get("action").toString();
+            return seatAction(seat, message.getAsJsonObject("action"));
         }
         if (message.has("directive")) {
             final JsonObject canonical = new JsonObject();
@@ -317,7 +322,14 @@ public final class SabTransport implements InteractiveBridge {
             canonical.addProperty("player", seat);
             return canonical.toString();
         }
-        return message.toString();
+        return seatAction(seat, message);
+    }
+
+    private static String seatAction(final int seat, final JsonObject action) {
+        if (action.has("player") || (action.has("type") && "directive".equals(action.get("type").getAsString()))) {
+            action.addProperty("player", seat);
+        }
+        return action.toString();
     }
 
     private static String wirePrompt(final String json) {
@@ -329,13 +341,12 @@ public final class SabTransport implements InteractiveBridge {
     private static JsonObject readResponse(final int seat, final String promptJson) {
         final JsonObject prompt = JsonParser.parseString(wirePrompt(promptJson)).getAsJsonObject();
         prompt.addProperty("decidingPlayerId", "player-" + seat);
-        while (true) {
-            final JsonObject message = JsonParser.parseString(recv(seat)).getAsJsonObject();
-            if (!message.has("promptId") || message.get("promptId").getAsLong() == 0
-                    || message.get("promptId").equals(prompt.get("promptId"))) return message;
-            sendTagged(seat, "error", "error", "{\"code\":\"stalePrompt\",\"message\":\"That decision is no longer open.\"}");
-            sendTagged(seat, "prompt", "prompt", prompt.toString());
-        }
+        final JsonObject message = JsonParser.parseString(recv(seat)).getAsJsonObject();
+        if (!message.has("promptId") || message.get("promptId").getAsLong() == 0
+                || message.get("promptId").equals(prompt.get("promptId"))) return message;
+        sendTagged(seat, "error", "error", "{\"code\":\"stalePrompt\",\"message\":\"That decision is no longer open.\"}");
+        sendTagged(seat, "prompt", "prompt", prompt.toString());
+        return null;
     }
 
     /**

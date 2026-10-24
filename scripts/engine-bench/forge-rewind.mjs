@@ -146,6 +146,14 @@ try {
   await source.call("submitAction", { payload: JSON.stringify(scriptedAnswer({ prompt })) });
   await source.prompt(prompt.promptId);
   console.log(JSON.stringify({ rejectedCorruptReplay: true, originalContinues: true }));
+  await requestRewind(source, 24);
+  await directive(source, 0, { type: "concede" });
+  assert.equal(await source.call("getRewindRequest"), "", "pending concede cancels promotion");
+  await until(
+    () => source.call("getGameOver"),
+    (over) => over === "true",
+  );
+  console.log(JSON.stringify({ queuedConcedePreserved: true }));
 } finally {
   source.close();
 }

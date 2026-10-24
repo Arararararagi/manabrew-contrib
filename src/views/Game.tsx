@@ -2662,10 +2662,7 @@ export default function Game({ exitTo }: GameProps = {}) {
         checkpoints={gameView.checkpoints}
         decisionHistory={gameView.decisionHistory}
         canRequestRestore={
-          !iAmEliminated &&
-          !gameView.gameOver &&
-          !gameView.decisionHistory?.rewinding &&
-          !gameView.decisionHistory?.unavailableReason
+          !iAmEliminated && !gameView.gameOver && !gameView.decisionHistory?.rewinding
         }
         onRequestRestore={setRestoreTarget}
         snapshotRecording={gameView.snapshotRecording}

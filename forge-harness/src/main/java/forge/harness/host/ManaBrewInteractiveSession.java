@@ -80,6 +80,8 @@ public final class ManaBrewInteractiveSession {
     private volatile String rewindRequest;
     private final Object rewindLock = new Object();
     private volatile String latestPromptJson;
+    private volatile List<String> publishedSnapshots = List.of();
+    private volatile boolean executionFinished;
     private volatile int promptedPlayerIndex = -1;
     private long promptSeq;
     private volatile boolean closed;
@@ -196,6 +198,7 @@ public final class ManaBrewInteractiveSession {
             }
             return;
         }
+        publishSnapshots();
         gameThread = new Thread(() -> {
             forge.util.MyRandom.setRandom(rng);
             try {
@@ -206,6 +209,14 @@ public final class ManaBrewInteractiveSession {
             } catch (RuntimeException | Error error) {
                 if (!closed) {
                     recordEngineError(error);
+                }
+            } finally {
+                try {
+                    publishSnapshots();
+                } catch (RuntimeException | Error error) {
+                    if (!closed && engineError == null) recordEngineError(error);
+                } finally {
+                    executionFinished = true;
                 }
             }
         }, (decisionJournal == null ? "mana-brew-forge-" : "Game-mana-brew-forge-") + sessionId);
@@ -260,6 +271,25 @@ public final class ManaBrewInteractiveSession {
     }
 
     public String getSnapshotJson(final int viewer) {
+        final List<String> snapshots = publishedSnapshots;
+        if (gameThread != null && Thread.currentThread() != gameThread && !snapshots.isEmpty()) {
+            return snapshots.get(viewer >= 0 && viewer < snapshots.size() - 1 ? viewer + 1 : 0);
+        }
+        return snapshotJson(viewer);
+    }
+
+    // RPC readers never traverse the mutable game. Publish complete seat views
+    // before exposing a prompt/revision, and before reporting final game over.
+    private void publishSnapshots() {
+        if (bridge != null) return;
+        final List<String> snapshots = new ArrayList<>();
+        for (int viewer = -1; viewer < game.getRegisteredPlayers().size(); viewer++) {
+            snapshots.add(snapshotJson(viewer));
+        }
+        publishedSnapshots = List.copyOf(snapshots);
+    }
+
+    String snapshotJson(final int viewer) {
         requireAttached();
         final String snapshot = InteractiveSnapshotExtractor.snapshotJson(
                 game, castingAbility, sessionId, viewer, secretChoiceVisibility, handKnowledge,
@@ -271,6 +301,11 @@ public final class ManaBrewInteractiveSession {
         history.addProperty("unavailableReason", decisionHistory.unavailableReason());
         view.add("decisionHistory", history);
         return view.toString();
+    }
+
+    JsonObject verificationView(final int viewer) {
+        return InteractiveSnapshotExtractor.verificationView(game, castingAbility, sessionId,
+                viewer, secretChoiceVisibility, handKnowledge);
     }
 
     SessionSnapshot captureSnapshot() {
@@ -305,7 +340,7 @@ public final class ManaBrewInteractiveSession {
     }
 
     public boolean isGameOver() {
-        return game != null && game.isGameOver();
+        return game != null && game.isGameOver() && (gameThread == null || executionFinished);
     }
 
     public long getStateRevision() {
@@ -339,7 +374,17 @@ public final class ManaBrewInteractiveSession {
     }
 
     public String getRewindRequest() {
-        return rewindRequest == null ? "" : rewindRequest;
+        synchronized (rewindLock) {
+            // A directive accepted by the source must not disappear with it.
+            // Prompt responses belong to the abandoned timeline; directives do not.
+            if (rewindRequest != null && actions.stream().anyMatch(queued -> queued.canonical() != null
+                    && "directive".equals(queued.canonical().get("type").getAsString())
+                    && !isRestoreDirective(queued.decoded()))) {
+                rewindRequest = null;
+                rewindLock.notifyAll();
+            }
+            return rewindRequest == null ? "" : rewindRequest;
+        }
     }
 
     public void resumeAfterFailedRewind() {
@@ -358,7 +403,7 @@ public final class ManaBrewInteractiveSession {
     }
 
     public String exportReplaySnapshot(final String history) {
-        if (decisionJournal == null || bridge != null || closed || isGameOver()) {
+        if (decisionJournal == null || bridge != null || closed || game.isGameOver()) {
             throw new IllegalStateException("replay snapshots require a live threaded journal session");
         }
         final var result = new java.util.concurrent.CompletableFuture<String>();
@@ -2081,13 +2126,16 @@ public final class ManaBrewInteractiveSession {
 
     private JsonObject takeAction() throws InterruptedException {
         while (true) {
+            JsonObject verified = null;
             if (replaying && actions.isEmpty()) {
-                final JsonObject action = decisionHistory.replayAction(latestPromptJson, replayVerification());
+                verified = replayVerification();
+                final JsonObject action = decisionHistory.replayAction(latestPromptJson, verified);
                 if (action != null) {
                     submitAction(action.toString());
                 } else {
                     restoreVoteView = restoredVote;
                     if (restoredVote != null) restoreVoteCount = ((Number) restoredVote.get("voteId")).intValue();
+                    publishSnapshots();
                     replaying = false;
                     if (bridge != null) bridge.replayReady();
                 }
@@ -2142,11 +2190,12 @@ public final class ManaBrewInteractiveSession {
                 announceState();
                 continue;
             }
-            if (decisionJournal != null && queued.canonical() != null) {
+            if (decisionJournal != null && queued.canonical() != null
+                    && (decisionHistory == null || decisionHistory.unavailableReason() == null)) {
                 if (isRestoreDirective(action)) {
                     decisionJournal.invalidate("snapshot restore is unsupported by decision replay");
                 } else {
-                    final JsonObject verification = replayVerification();
+                    final JsonObject verification = verified == null ? replayVerification() : verified;
                     decisionJournal.record(promptedPlayerIndex, latestPromptJson, queued.canonical(), verification);
                     if (decisionHistory != null) {
                         decisionHistory.record(promptedPlayerIndex, latestPromptJson, queued.canonical(), verification);
@@ -2195,6 +2244,7 @@ public final class ManaBrewInteractiveSession {
                     ? action.get("player").getAsInt()
                     : promptedPlayerIndex;
             concedePlayer(target);
+            announceState();
             if (target != promptedPlayerIndex && !gameDecided()) {
                 continue;
             }
@@ -2238,6 +2288,7 @@ public final class ManaBrewInteractiveSession {
     }
 
     private void announceState() {
+        publishSnapshots();
         stateRevision++;
         if (bridge != null && !replaying) {
             bridge.publishState();
@@ -2327,7 +2378,6 @@ public final class ManaBrewInteractiveSession {
     private void requestRestore(final int requester, final int checkpointId) {
         final List<Player> players = game.getRegisteredPlayers();
         if (requester < 0 || requester >= players.size()
-                || (decisionHistory != null && decisionHistory.unavailableReason() != null)
                 || (restoreVote != null && restoreVote.status == RestoreVoteStatus.PENDING)
                 || players.get(requester).hasLost()) {
             return;
@@ -3184,12 +3234,14 @@ public final class ManaBrewInteractiveSession {
 
     private void publishAgentPrompt(final String decidingPlayerId, final String sourceCardId, final JsonObject input) {
         promptedPlayerIndex = parsePlayerSlot(decidingPlayerId);
-        latestPromptJson = ManabrewProtocolAdapter.agentPrompt(
+        final String prompt = ManabrewProtocolAdapter.agentPrompt(
                 ++promptSeq,
                 decidingPlayerId,
                 sourceCard(promptedPlayerIndex, sourceCardId),
                 sourceAbilityText(sourceCardId),
                 input);
+        publishSnapshots();
+        latestPromptJson = prompt;
     }
 
     private static int parsePlayerSlot(final String decidingPlayerId) {

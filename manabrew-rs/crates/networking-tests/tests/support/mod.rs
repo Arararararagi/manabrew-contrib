@@ -647,6 +647,7 @@ impl Client {
                             view["checkpoints"].as_array().unwrap().len(),
                             checkpoint_id as usize - 1
                         );
+                        assert!(view["decisionHistory"].is_object());
                         assert_eq!(view["snapshotRecording"], false);
                         approved = true;
                     }
@@ -1057,6 +1058,7 @@ fn spawn_node(relay_url: &str, manifest: Option<&str>) -> Proc {
     command
         .env("SELF_HOSTED_NODE_RELAY_URL", relay_url)
         .env("SELF_HOSTED_NODE_ROOM_NAME", "Regression room")
+        .env("SELF_HOSTED_NODE_FORGE_AI", "false")
         .env(
             "SELF_HOSTED_NODE_RECONNECT_TIMEOUT_S",
             RECONNECT_TIMEOUT_S.to_string(),
