@@ -1,3 +1,4 @@
+import { UI_FONT_FAMILY } from "@/themes/typography";
 import {
   Container,
   Sprite,
@@ -14,12 +15,19 @@ import {
 import type { CardDto } from "@/protocol/game";
 import type { HandActionOption } from "@/stores/useGameUIStore";
 import { deriveCardRailState, type CardRailState } from "@/components/game/cardRailState";
-import { cardTypeLine, counterColorKey, counterIconName } from "@/components/game/cardPresentation";
+import {
+  cardTypeLine,
+  counterColorKey,
+  counterIconName,
+  ROOM_DOOR_BOUNDS,
+  roomDoorState,
+} from "@/components/game/cardPresentation";
 import { CARD_W, CARD_H, CARD_RADIUS } from "@/components/game/game.constants";
 import { deriveCardChoiceIndicators } from "@/components/game/game.utils";
 import { isHorizontalGameCard } from "@/lib/horizontalGameCard";
+import { gameCardFaceIndex } from "@/lib/gameCard";
 import type { Theme } from "@/hooks/useTheme";
-import { cardFrameTintHex, withAlpha } from "@/themes/gameTheme";
+import { cardFrameTintHex, readableTextColor, withAlpha } from "@/themes/gameTheme";
 import { getTheme } from "@/hooks/useTheme";
 import { hexToNum } from "./colorUtils";
 import { DOOMED_FILL_ALPHA } from "./constants";
@@ -34,6 +42,11 @@ import { battlefieldKeywords } from "@/lib/battlefieldKeywords";
 import { applyManaSymbol, parseManaCost } from "./manaSymbols";
 import { asGameDeckCard } from "@/lib/decks";
 import { cardRenderInputKey, renderCard } from "@/lib/cardRenderer";
+import {
+  releaseCardRaster,
+  selectCardRenderTier,
+  type CardRenderTier,
+} from "@/lib/cardRenderTypes";
 import { createGeneratedCardTexture, getGeneratedCardArtWindows } from "./generatedCardTexture";
 import { writeCardTextureUvs } from "./cardTextureUvs";
 import { loadCardBack } from "./cardBackTexture";
@@ -63,6 +76,43 @@ let activeTheme: Theme = getTheme();
 const TINTED_TEXT_STYLES: TextStyle[] = [];
 const SHADOW_CONTEXTS: { width: number; height: number; context: GraphicsContext }[] = [];
 const NO_FOIL_EXCLUSIONS = [] as const;
+const FACE_HOLD_CAP_MS = 3000;
+const FACE_HOLD_JOIN_MS = 50;
+
+interface FaceHold {
+  readonly members: Set<CardSprite>;
+  readonly waiting: Set<CardSprite>;
+  released: boolean;
+  timer: ReturnType<typeof setTimeout>;
+}
+let joinableFaceHold: FaceHold | null = null;
+
+function joinFaceHold(sprite: CardSprite): FaceHold {
+  let hold = joinableFaceHold;
+  if (!hold) {
+    const created: FaceHold = {
+      members: new Set(),
+      waiting: new Set(),
+      released: false,
+      timer: setTimeout(() => releaseFaceHold(created), FACE_HOLD_CAP_MS),
+    };
+    hold = joinableFaceHold = created;
+    setTimeout(() => {
+      if (joinableFaceHold === created) joinableFaceHold = null;
+    }, FACE_HOLD_JOIN_MS);
+  }
+  hold.members.add(sprite);
+  hold.waiting.add(sprite);
+  return hold;
+}
+
+function releaseFaceHold(hold: FaceHold): void {
+  if (hold.released) return;
+  hold.released = true;
+  clearTimeout(hold.timer);
+  if (joinableFaceHold === hold) joinableFaceHold = null;
+  for (const sprite of hold.members) sprite.revealHeldFace();
+}
 
 function drawShadowContext(context: GraphicsContext, width: number, height: number): void {
   context.clear();
@@ -91,6 +141,11 @@ export function setCardSpriteTheme(theme: Theme): void {
   for (const style of TINTED_TEXT_STYLES) {
     style.fill = theme.gameTheme.textOnTinted;
   }
+  NAME_STYLE.fill = readableTextColor(
+    theme.gameTheme.cardPlaceholder.fill,
+    theme.gameTheme.canvas.shadow,
+    theme.gameTheme.textOnTinted,
+  );
   updateFoilTheme(theme);
   if (shadowChanged) {
     for (const { context, width, height } of SHADOW_CONTEXTS) {
@@ -120,7 +175,7 @@ function prefersReducedMotion(): boolean {
 const tintedTextFill = (): string => activeTheme.gameTheme.textOnTinted;
 const PT_STYLE = registerTintedTextStyle(
   new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    fontFamily: UI_FONT_FAMILY,
     fontSize: 10,
     fontWeight: "bold",
     fill: tintedTextFill(),
@@ -128,7 +183,7 @@ const PT_STYLE = registerTintedTextStyle(
 );
 const BADGE_STYLE = registerTintedTextStyle(
   new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    fontFamily: UI_FONT_FAMILY,
     fontSize: 6,
     fontWeight: "bold",
     fill: tintedTextFill(),
@@ -136,27 +191,29 @@ const BADGE_STYLE = registerTintedTextStyle(
 );
 const COUNTER_STYLE = registerTintedTextStyle(
   new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    fontFamily: UI_FONT_FAMILY,
     fontSize: 8,
     fontWeight: "bold",
     fill: tintedTextFill(),
   }),
 );
-const NAME_STYLE = registerTintedTextStyle(
-  new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-    fontSize: 8,
-    fill: tintedTextFill(),
-    wordWrap: true,
-    wordWrapWidth: CARD_W - 8,
-    align: "center",
-  }),
-);
+const NAME_STYLE = new TextStyle({
+  fontFamily: UI_FONT_FAMILY,
+  fontSize: 8,
+  fill: readableTextColor(
+    activeTheme.gameTheme.cardPlaceholder.fill,
+    activeTheme.gameTheme.canvas.shadow,
+    activeTheme.gameTheme.textOnTinted,
+  ),
+  wordWrap: true,
+  wordWrapWidth: CARD_W - 8,
+  align: "center",
+});
 // Not registered as a tinted style: the frame text color is contrast-aware
 // (dark on light tint bars, light on the dark art scrim) and set per-card in
 // `renderFrame`, so each frame Text gets its own cloned style instance.
 const FRAME_NAME_STYLE = new TextStyle({
-  fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+  fontFamily: UI_FONT_FAMILY,
   fontSize: 7,
   fontWeight: "600",
   fill: tintedTextFill(),
@@ -165,7 +222,7 @@ const FRAME_NAME_STYLE = new TextStyle({
   lineHeight: 8,
 });
 const FRAME_TYPE_STYLE = new TextStyle({
-  fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+  fontFamily: UI_FONT_FAMILY,
   fontSize: 5.5,
   fill: tintedTextFill(),
   wordWrap: true,
@@ -173,7 +230,7 @@ const FRAME_TYPE_STYLE = new TextStyle({
   lineHeight: 6.5,
 });
 const FOIL_STAR_STYLE = new TextStyle({
-  fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+  fontFamily: UI_FONT_FAMILY,
   fontSize: 10,
   fontWeight: "bold",
   fill: activeTheme.gameTheme.rarity.rare,
@@ -228,7 +285,7 @@ function truncateChipLabel(text: string): string {
 }
 const KEYWORD_CHIP_STYLE = registerTintedTextStyle(
   new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    fontFamily: UI_FONT_FAMILY,
     fontSize: 7,
     fontWeight: "bold",
     fill: tintedTextFill(),
@@ -236,7 +293,7 @@ const KEYWORD_CHIP_STYLE = registerTintedTextStyle(
 );
 const RAIL_LABEL_STYLE = registerTintedTextStyle(
   new TextStyle({
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    fontFamily: UI_FONT_FAMILY,
     fontSize: 6,
     fontWeight: "700",
     fill: tintedTextFill(),
@@ -404,6 +461,8 @@ export class CardSprite extends Container {
   private contentContainer: Container;
   private printedFaceContainer: Container;
   private printedChromeContainer: Container;
+  private readonly roomDoorsGfx = new Graphics();
+  private roomDoorsState = -1;
   private ptContainer: Container;
   private ptBg: Graphics;
   private ptText: Text;
@@ -458,11 +517,13 @@ export class CardSprite extends Container {
   private loadGeneration = 0;
   private imageAbort: AbortController | null = null;
   private imageRequestKey: string | null = null;
+  private renderTier: CardRenderTier | undefined;
   private ownedImageTexture: Texture | null = null;
   private imageIsArtwork = false;
   private readonly kind: "battlefield" | "hand" | "zone";
   private handRulesFace: HandRulesCardFace | null = null;
   private handRulesView = false;
+  private faceHold: FaceHold | null = null;
   private handRulesInteractive = true;
   private handRulesActions: HandActionOption[] = [];
   private onSelectHandRulesAction: ((action: HandActionOption) => void) | null = null;
@@ -492,6 +553,7 @@ export class CardSprite extends Container {
     this.cw = width;
     this.ch = height;
     this.eventMode = "static";
+    this.onRender = () => this.syncRasterTier();
     this.cursor = "pointer";
 
     this.shadowGfx = new Graphics({ context: shadowContext(this.cw, this.ch) });
@@ -684,8 +746,11 @@ export class CardSprite extends Container {
         this.printedChromeContainer.addChild(child);
       }
     }
+    this.roomDoorsGfx.eventMode = "none";
+    this.roomDoorsGfx.visible = false;
     this.foilSheen = new CardFoil(() => this.onVisualChange?.());
     this.contentContainer.addChild(this.foilSheen);
+    this.contentContainer.addChild(this.roomDoorsGfx);
     this.contentContainer.addChild(this.printedChromeContainer);
     this.contentContainer.addChild(this.liveHighlight);
     this.addChild(this.pulseRing.gfx);
@@ -725,14 +790,49 @@ export class CardSprite extends Container {
   private imageKey(card = this.card): string {
     if (this.hasHiddenIdentity(card)) return "hidden";
     const deckCard = this.deckCard(card);
-    const faceIndex = this.previewFace ?? (card.isTransformed ? 1 : 0);
+    const faceIndex = this.previewFace ?? gameCardFaceIndex(card);
     const style = this.isBattlefield ? activeStyle : "realistic";
+    const tier = this.selectRasterTier();
     return JSON.stringify([
       style,
+      tier,
       style !== "realistic" && style !== "art"
         ? cardRenderInputKey({ card, deckCard, faceIndex })
         : [useScryfallStore.getState().locale, deckCard, faceIndex],
     ]);
+  }
+
+  private projectedRasterScale(): number {
+    let scale = Math.max(Math.abs(this.scale.x), Math.abs(this.scale.y));
+    for (let node: Container | null = this.parent; node; node = node.parent) {
+      scale *= Math.max(Math.abs(node.scale.x), Math.abs(node.scale.y));
+    }
+    return scale;
+  }
+
+  private selectRasterTier(scale = this.projectedRasterScale()): CardRenderTier {
+    return selectCardRenderTier(
+      this.cw * scale,
+      this.ch * scale,
+      Math.min(2, window.devicePixelRatio || 1),
+      this.renderTier,
+      this.previewFlipPhase !== "idle",
+    );
+  }
+
+  private syncRasterTier(): void {
+    const scale = this.projectedRasterScale();
+    this.handRulesFace?.setRasterProjection(
+      this.cw * scale,
+      this.ch * scale,
+      this.previewFlipPhase !== "idle",
+    );
+    const tier = this.selectRasterTier(scale);
+    if (tier === this.renderTier) return;
+    this.renderTier = tier;
+    if (this.isBattlefield && activeStyle !== "realistic" && activeStyle !== "art") {
+      void this.loadImage();
+    }
   }
 
   private displayDimensions(): { width: number; height: number } {
@@ -746,7 +846,7 @@ export class CardSprite extends Container {
   // Scryfall serves horizontal-frame cards as upright 5:7 PNGs — rotate
   // the sprite 90° so the printed art reads in landscape inside the slot.
   private isHorizontal(): boolean {
-    const faceIndex = this.previewFace ?? (this.card.isTransformed ? 1 : 0);
+    const faceIndex = this.previewFace ?? gameCardFaceIndex(this.card);
     return isHorizontalGameCard(this.card, this.deckCard().layout, faceIndex);
   }
   get horizontalFrame(): boolean {
@@ -861,41 +961,17 @@ export class CardSprite extends Container {
       this.ownedImageTexture = null;
       this.imageIsArtwork = false;
       this._imageLoaded = false;
-      this.imageSpr.visible = false;
-      this.imageMask.visible = false;
-      this.syncHandFaceVisibility();
     }
-    this.placeholderGfx.visible = !this._imageLoaded;
-    this.nameText.visible = !hidden && !this._imageLoaded;
     this.nameText.text = hidden ? "" : this.card.identity.name;
+    this.syncHandFaceVisibility();
     if (this.reapplyOrientation()) this.rebuildDecorations(true);
 
     const card = this.card;
     const deckCard = hidden ? undefined : this.deckCard();
     const custom = this.isBattlefield && activeStyle !== "realistic" && !hidden;
-    const faceIndex = this.previewFace ?? (card.isTransformed ? 1 : 0);
-    const fallback =
-      custom && !this._imageLoaded
-        ? useScryfallStore
-            .getState()
-            .getCardTexture(deckCard!, "full", faceIndex)
-            .then((scan) => {
-              if (
-                !this.destroyed &&
-                generation === this.loadGeneration &&
-                !this._imageLoaded &&
-                scan !== Texture.EMPTY
-              )
-                this.showImage(scan);
-              return scan;
-            })
-            .catch((error: unknown) => {
-              if (!this.destroyed && generation === this.loadGeneration) {
-                console.warn("[pixi] card scan load failed", card.identity.name, error);
-              }
-              return Texture.EMPTY;
-            })
-        : null;
+    const faceIndex = this.previewFace ?? gameCardFaceIndex(card);
+    const tier = this.selectRasterTier();
+    this.renderTier = tier;
     let texture: Texture;
     let owned = false;
     let artwork = false;
@@ -906,10 +982,22 @@ export class CardSprite extends Container {
         texture = await useScryfallStore.getState().getCardTexture(deckCard!, "art", faceIndex);
         artwork = true;
       } else if (custom) {
-        const canvas = await renderCard({ card, deckCard, faceIndex }, controller.signal);
-        if (this.destroyed || generation !== this.loadGeneration) return;
-        texture = createGeneratedCardTexture(canvas);
-        owned = true;
+        const raster = await renderCard({ card, deckCard, faceIndex }, controller.signal, { tier });
+        try {
+          if (this.destroyed || generation !== this.loadGeneration || controller.signal.aborted)
+            return;
+          texture = createGeneratedCardTexture(raster);
+          owned = true;
+        } finally {
+          releaseCardRaster(raster);
+        }
+        if (deckCard?.backFace) {
+          void renderCard(
+            { card, deckCard, faceIndex: faceIndex === 0 ? 1 : 0 },
+            controller.signal,
+            { tier, priority: "background" },
+          ).then(releaseCardRaster, () => undefined);
+        }
       } else {
         texture = await useScryfallStore.getState().getCardTexture(deckCard!, "full", faceIndex);
       }
@@ -922,14 +1010,12 @@ export class CardSprite extends Container {
         card.identity.name,
         error,
       );
-      texture = fallback
-        ? await fallback
-        : custom
-          ? await useScryfallStore
-              .getState()
-              .getCardTexture(deckCard!, "full", faceIndex)
-              .catch(() => Texture.EMPTY)
-          : Texture.EMPTY;
+      texture = custom
+        ? await useScryfallStore
+            .getState()
+            .getCardTexture(deckCard!, "full", faceIndex)
+            .catch(() => Texture.EMPTY)
+        : Texture.EMPTY;
     }
     if (this.destroyed || generation !== this.loadGeneration) {
       if (owned) texture.destroy(true);
@@ -944,10 +1030,6 @@ export class CardSprite extends Container {
       this.ownedImageTexture = null;
       this.imageIsArtwork = false;
       this._imageLoaded = false;
-      this.imageSpr.visible = false;
-      this.imageMask.visible = false;
-      this.placeholderGfx.visible = true;
-      this.nameText.visible = !hidden;
       const previousCounterReserve = this.frameCounterReserve;
       this.renderFrame();
       if (this.frameCounterReserve !== previousCounterReserve) this.updateCounters();
@@ -963,16 +1045,13 @@ export class CardSprite extends Container {
     this.ownedImageTexture = owned ? texture : null;
     this.imageIsArtwork = artwork;
     this.imageSpr.texture = texture;
-    this.imageSpr.visible = true;
-    this.imageMask.visible = true;
     this.fitImageToSlot();
-    this.placeholderGfx.visible = false;
-    this.nameText.visible = false;
     this._imageLoaded = true;
     const previousCounterReserve = this.frameCounterReserve;
     this.renderFrame();
     if (this.frameCounterReserve !== previousCounterReserve) this.updateCounters();
     this.updateMana();
+    this.updateRoomDoors();
     this.syncHandFaceVisibility();
     previous?.destroy(true);
     this.onVisualChange?.();
@@ -1009,10 +1088,10 @@ export class CardSprite extends Container {
       this.commitPreviewChange();
       return;
     }
-    const currentFace = this.previewFace ?? (this.card.isTransformed ? 1 : 0);
+    const currentFace = this.previewFace ?? gameCardFaceIndex(this.card);
     if (
       !this.previewOrientationCommit &&
-      (face ?? (this.card.isTransformed ? 1 : 0)) === currentFace &&
+      (face ?? gameCardFaceIndex(this.card)) === currentFace &&
       rulesView === this.handRulesView
     )
       return;
@@ -1070,7 +1149,7 @@ export class CardSprite extends Container {
     if (this.usesHandRulesView === active) return;
     this.handRulesView = active;
     if (!this.handRulesFace) {
-      const faceIndex = this.previewFace ?? (this.card.isTransformed ? 1 : 0);
+      const faceIndex = this.previewFace ?? gameCardFaceIndex(this.card);
       this.handRulesFace = new HandRulesCardFace(
         this.card,
         faceIndex,
@@ -1095,11 +1174,46 @@ export class CardSprite extends Container {
     this.updateHandControls();
     this.refreshCardRadiusChrome();
   }
+  // Cards that start waiting together appear together, never one by one.
+  private holdUntilFaceReady(pending: boolean): void {
+    const hold = this.faceHold;
+    if (!pending) {
+      if (hold && !hold.released) {
+        hold.waiting.delete(this);
+        if (hold.waiting.size > 0) {
+          this.renderable = false;
+          return;
+        }
+        releaseFaceHold(hold);
+      }
+      this.faceHold = null;
+      this.renderable = true;
+      return;
+    }
+    if (hold?.released) {
+      this.renderable = true;
+      return;
+    }
+    if (hold) hold.waiting.add(this);
+    else this.faceHold = joinFaceHold(this);
+    this.renderable = false;
+  }
+  revealHeldFace(): void {
+    if (this.destroyed) return;
+    this.renderable = true;
+    this.onVisualChange?.();
+  }
   private syncHandFaceVisibility(): void {
     const hidden = this.hasHiddenIdentity();
     const ready = !hidden && this.handRulesFace?.imageReady === true;
-    this.printedFaceContainer.visible = hidden || !this.handRulesView || !ready;
-    this.printedChromeContainer.visible = this.printedFaceContainer.visible;
+    const pending = !hidden && this.handRulesView && !ready;
+    this.holdUntilFaceReady(pending);
+    this.printedFaceContainer.visible = hidden || !this.handRulesView || pending;
+    this.printedChromeContainer.visible = hidden || !this.handRulesView;
+    this.imageSpr.visible = this._imageLoaded && !pending;
+    this.imageMask.visible = this.imageSpr.visible;
+    this.placeholderGfx.visible = !this.imageSpr.visible;
+    this.nameText.visible = !hidden && !this.imageSpr.visible;
     if (this.handRulesFace) {
       this.handRulesFace.visible = !hidden && ready && (this.handRulesView || !this._imageLoaded);
     }
@@ -1111,6 +1225,7 @@ export class CardSprite extends Container {
     const top = this.handControls ?? highlights ?? this.liveHighlight;
     if (this.contentContainer.children.at(-1) !== top) {
       this.contentContainer.addChild(this.foilSheen);
+      this.contentContainer.addChild(this.roomDoorsGfx);
       this.contentContainer.addChild(this.printedChromeContainer);
       this.contentContainer.addChild(this.liveHighlight);
       if (highlights) this.contentContainer.addChild(highlights);
@@ -1153,7 +1268,7 @@ export class CardSprite extends Container {
     } else {
       writeCardTextureUvs(this.imageSpr, this.contentContainer, this.foilSurface, this.foilUvs);
     }
-    this.foilSheen.setTexture(texture, this.foilUvs);
+    this.foilSheen.setTexture(texture, this.foilUvs, embedded?.foilSource ?? this.imageSpr);
     this.foilSheen.setArtWindows(getGeneratedCardArtWindows(texture));
   }
   setHandControls(spec: HandCardControlsSpec | null): void {
@@ -1174,7 +1289,7 @@ export class CardSprite extends Container {
             rulesView: this.usesHandRulesView,
             alternateFace: spec.horizontal
               ? spec.alternateFace
-              : (this.previewFace ?? (this.card.isTransformed ? 1 : 0)) === 1,
+              : (this.previewFace ?? gameCardFaceIndex(this.card)) === 1,
           }
         : null,
       this.cw,
@@ -1222,7 +1337,7 @@ export class CardSprite extends Container {
 
   private updateHandRulesFace(): void {
     if (!this.handRulesFace || (!this.handRulesFace.visible && !this.handRulesView)) return;
-    const faceIndex = this.previewFace ?? (this.card.isTransformed ? 1 : 0);
+    const faceIndex = this.previewFace ?? gameCardFaceIndex(this.card);
     this.handRulesFace.setContent(this.card, faceIndex, this.cw, this.ch);
     this.syncHandFaceVisibility();
   }
@@ -1252,6 +1367,7 @@ export class CardSprite extends Container {
     this.updateMana();
     this.updateCardFilter();
     this.updateEdgeGlow();
+    this.updateRoomDoors(true);
     this.updateChoice(true);
     this.handRulesFace?.setTheme(activeTheme);
     this.handControls?.setTheme(activeTheme);
@@ -1441,7 +1557,35 @@ export class CardSprite extends Container {
     if (card.manaCost !== previous.manaCost || frameChanged) this.updateMana();
     if (filterChanged) this.updateCardFilter();
     if (edgeGlowChanged) this.updateEdgeGlow();
+    this.updateRoomDoors();
     this.updateHandRulesFace();
+  }
+  private updateRoomDoors(force = false): void {
+    const state = roomDoorState(this.card) ?? -1;
+    if (!force && state === this.roomDoorsState) return;
+    this.roomDoorsState = state;
+    this.roomDoorsGfx.clear();
+    this.roomDoorsGfx.visible = state >= 0;
+    if (state < 0) return;
+    const theme = activeTheme.gameTheme;
+    for (let half = 0; half < ROOM_DOOR_BOUNDS.length; half++) {
+      const bounds = ROOM_DOOR_BOUNDS[half]!;
+      const inset = 0.75;
+      const x = bounds.x * this.cw + inset;
+      const width = bounds.width * this.cw - inset * 2;
+      const height = this.ch - inset * 2;
+      if ((state & (1 << half)) === 0) {
+        this.roomDoorsGfx
+          .roundRect(x, inset, width, height, CARD_RADIUS - inset)
+          .fill({ color: hexToNum(theme.canvas.shadow), alpha: 0.42 });
+      } else {
+        this.roomDoorsGfx
+          .roundRect(x, inset, width, height, CARD_RADIUS - inset)
+          .stroke({ color: hexToNum(theme.canvas.shadow), width: 2, alignment: 1 })
+          .roundRect(x, inset, width, height, CARD_RADIUS - inset)
+          .stroke({ color: hexToNum(theme.activeAction.active), width: 1.25, alignment: 1 });
+      }
+    }
   }
   private updateEdgeGlow(): void {
     const card = this.card;
@@ -1527,6 +1671,13 @@ export class CardSprite extends Container {
     }
   }
   destroy(options?: DestroyOptions): void {
+    const hold = this.faceHold;
+    this.faceHold = null;
+    if (hold && !hold.released) {
+      hold.members.delete(this);
+      hold.waiting.delete(this);
+      if (hold.waiting.size === 0) releaseFaceHold(hold);
+    }
     this.loadGeneration++;
     this.previewFlipGeneration += 1;
     this.previewFlip.cancel();

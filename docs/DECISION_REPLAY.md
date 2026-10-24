@@ -197,7 +197,7 @@ The Journal tab replaces these controls for supported Forge games.
 | AI                       | Record external bot outputs; do not rerun the bot policy during reconstruction. Internal Forge AI is unsupported.                                                                                                                        |
 
 The fork fix is intentionally narrow: [de6654d46d8](https://github.com/witchesofthehill/forge/commit/de6654d46d8)
-on `fix/replay-room-choice-order`. This branch pins that commit. The regression
+on `fix/replay-room-choice-order`. The pinned Forge merge includes that commit alongside current main's Forge changes. The regression
 fails against the original pinned fork.
 
 Specific remaining audit targets:

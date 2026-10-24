@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppInitStore } from "@/stores/useAppInitStore";
 import { useIsShortScreen, useIsTouch } from "@/hooks/useBreakpoints";
 import { BreweryBackdrop } from "@/components/BreweryBackdrop";
+import { ManaBrewLogo } from "@/components/layout/ManaBrewLogo";
 import { cn } from "@/lib/utils";
 const BAR_FILL_MS = 200;
 // Minimum dwell at the initial `idle` stage. Without it, a cache hit can
@@ -84,27 +85,16 @@ export function AppInitGate({ children }: { children: ReactNode }) {
     <div className={cn("flex flex-col items-center gap-2 text-center", shortTouch && "gap-0.5")}>
       <p
         className={cn(
-          "font-mono text-[0.65rem] uppercase tracking-[0.55em] text-muted-foreground",
-          shortTouch && "text-[0.55rem]",
+          "text-xl font-semibold uppercase tracking-[0.2em] text-muted-foreground",
+          shortTouch && "text-sm",
         )}
       >
         Welcome to
       </p>
-      <h1
-        className={cn(
-          "font-serif text-5xl font-light tracking-[0.08em] text-foreground md:text-6xl",
-          shortTouch && "text-3xl md:text-3xl",
-        )}
-      >
-        Manabrew
+      <h1 className="max-w-full">
+        <ManaBrewLogo decorative height={shortTouch ? 120 : 200} />
+        <span className="sr-only">Manabrew</span>
       </h1>
-      <div
-        aria-hidden
-        className={cn(
-          "mt-2 h-px w-24 bg-gradient-to-r from-transparent via-foreground/50 to-transparent",
-          shortTouch && "mt-0.5",
-        )}
-      />
     </div>
   );
 
@@ -152,8 +142,8 @@ export function AppInitGate({ children }: { children: ReactNode }) {
           >
             <div
               className={cn(
-                "flex w-full max-w-2xl flex-col items-center gap-10",
-                isTouch && "gap-6",
+                "flex w-full max-w-2xl flex-col items-center gap-6",
+                isTouch && "gap-4",
                 shortTouch && "h-full min-h-0 max-w-xl justify-center gap-3",
               )}
             >

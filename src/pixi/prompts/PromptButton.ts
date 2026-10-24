@@ -1,3 +1,4 @@
+import { UI_FONT_FAMILY as FONT } from "@/themes/typography";
 import { Container, Graphics, Rectangle, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 import type { Theme } from "@/hooks/useTheme";
 import { colorAlpha, hexToNum } from "@/pixi/colorUtils";
@@ -5,7 +6,6 @@ import { gameIconTexture } from "@/pixi/gameIconCache";
 import { animationsEnabled } from "@/pixi/effects/enabled";
 import { gsap } from "@/pixi/effects/gsap";
 
-const FONT = "Inter, system-ui, sans-serif";
 const PRESS_SECONDS = 0.08;
 const RELEASE_SECONDS = 0.18;
 
@@ -96,7 +96,7 @@ export class PromptButton extends Container {
     this.labelText = new Text({
       text: labelPlacement === "stacked" ? options.label.toUpperCase() : options.label,
       style: new TextStyle({
-        fontFamily: "Inter, system-ui, sans-serif",
+        fontFamily: FONT,
         fontSize:
           options.fontSize ?? (labelPlacement === "stacked" ? 8 : options.compact ? 10 : 12),
         fontWeight: options.fontWeight ?? "700",
@@ -373,10 +373,10 @@ export class PromptButton extends Container {
     const label = new Text({
       text: value,
       style: new TextStyle({
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontFamily: FONT,
         fontSize: 10,
         fontWeight: "700",
-        fill: hexToNum(this.theme.gameTheme.textOnTinted),
+        fill: hexToNum(this.theme.appTheme["muted-foreground"]),
       }),
     });
     label.anchor.set(0.5);
@@ -385,10 +385,10 @@ export class PromptButton extends Container {
     const height = 18;
     const background = new Graphics()
       .roundRect(-width / 2, -height / 2, width, height, 4)
-      .fill({ color: hexToNum(this.theme.gameTheme.canvas.shadow), alpha: 0.25 })
+      .fill({ color: hexToNum(this.theme.appTheme.muted), alpha: 0.95 })
       .moveTo(-width / 2 + 4, height / 2 - 1)
       .lineTo(width / 2 - 4, height / 2 - 1)
-      .stroke({ color: hexToNum(this.theme.gameTheme.canvas.shadow), width: 1, alpha: 0.35 });
+      .stroke({ color: hexToNum(this.theme.appTheme.border), width: 1, alpha: 0.8 });
     shortcut.eventMode = "none";
     shortcut.addChild(background, label);
     return shortcut;

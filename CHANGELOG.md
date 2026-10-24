@@ -1,5 +1,110 @@
 # Changelog
 
+## [3.64.8](https://github.com/witchesofthehill/manabrew/compare/v3.64.7...v3.64.8) (2026-10-24)
+
+### Fixes
+
+* crash engine ([#1119](https://github.com/witchesofthehill/manabrew/issues/1119)) ([a728ce8](https://github.com/witchesofthehill/manabrew/commit/a728ce88c21546af1e070fa7066f0f65dd367a7d))
+
+## [3.64.7](https://github.com/witchesofthehill/manabrew/compare/v3.64.6...v3.64.7) (2026-10-24)
+
+### Fixes
+
+* collection spam ([#1118](https://github.com/witchesofthehill/manabrew/issues/1118)) ([4c439a0](https://github.com/witchesofthehill/manabrew/commit/4c439a0ea6dd1b28412d684277c266f794a17cc8))
+
+## [3.64.6](https://github.com/witchesofthehill/manabrew/compare/v3.64.5...v3.64.6) (2026-10-23)
+
+### Fixes
+
+* x targeting action space ([#1116](https://github.com/witchesofthehill/manabrew/issues/1116)) ([f690093](https://github.com/witchesofthehill/manabrew/commit/f69009369c303e14e6e702e2e44270d1965c8bbb))
+
+## [3.64.5](https://github.com/witchesofthehill/manabrew/compare/v3.64.4...v3.64.5) (2026-10-23)
+
+### Fixes
+
+* aggressive preloading ([#1115](https://github.com/witchesofthehill/manabrew/issues/1115)) ([c72d014](https://github.com/witchesofthehill/manabrew/commit/c72d0146c348ad1a7ee1758a21be637c6eaba3da))
+
+## [3.64.4](https://github.com/witchesofthehill/manabrew/compare/v3.64.3...v3.64.4) (2026-10-23)
+
+### Fixes
+
+* bug ([#1108](https://github.com/witchesofthehill/manabrew/issues/1108)) ([00ef493](https://github.com/witchesofthehill/manabrew/commit/00ef493b70ec6397dd323ba35aaf2473e17043e7))
+
+## [3.64.3](https://github.com/witchesofthehill/manabrew/compare/v3.64.2...v3.64.3) (2026-10-22)
+
+### Fixes
+
+* **ui:** match board settings choices and compact navbar ([#1101](https://github.com/witchesofthehill/manabrew/issues/1101)) ([47c6acb](https://github.com/witchesofthehill/manabrew/commit/47c6acb155b2e02a8da2a680bacf0d22e440a407))
+
+## [3.64.2](https://github.com/witchesofthehill/manabrew/compare/v3.64.1...v3.64.2) (2026-10-22)
+
+### Fixes
+
+* preload in the background ([#1064](https://github.com/witchesofthehill/manabrew/issues/1064)) ([5a0e2f5](https://github.com/witchesofthehill/manabrew/commit/5a0e2f5d22f550ea682adbafd0188d08f7b5422b))
+
+## [3.64.1](https://github.com/witchesofthehill/manabrew/compare/v3.64.0...v3.64.1) (2026-10-22)
+
+### Fixes
+
+* **ui:** stop app start hanging on deck cover images ([#1105](https://github.com/witchesofthehill/manabrew/issues/1105)) ([28ad521](https://github.com/witchesofthehill/manabrew/commit/28ad5217b8430e56ac04031bc86c6d9e324ec7c2))
+
+## [3.64.0](https://github.com/witchesofthehill/manabrew/compare/v3.63.2...v3.64.0) (2026-10-21)
+
+### Features
+
+* **ui:** establish manabrew brand identity ([#1084](https://github.com/witchesofthehill/manabrew/issues/1084)) ([4082740](https://github.com/witchesofthehill/manabrew/commit/40827402cdfb4bceb0f1524e3a0810f81cef1a4f))
+
+## [3.63.2](https://github.com/witchesofthehill/manabrew/compare/v3.63.1...v3.63.2) (2026-10-21)
+
+### Fixes
+
+* disable foil shader overload ([#1096](https://github.com/witchesofthehill/manabrew/issues/1096)) ([b1b9d58](https://github.com/witchesofthehill/manabrew/commit/b1b9d5847b2a9aee6e3f744a4a18d305fd394ab6))
+
+## [3.63.1](https://github.com/witchesofthehill/manabrew/compare/v3.63.0...v3.63.1) (2026-10-21)
+
+### Fixes
+
+* tinybones actionspace and desktop ([#1094](https://github.com/witchesofthehill/manabrew/issues/1094)) ([00c847a](https://github.com/witchesofthehill/manabrew/commit/00c847a9ad79a143c1f3f2b2bb914fe1f4514e92))
+
+## [3.63.0](https://github.com/witchesofthehill/manabrew/compare/v3.62.2...v3.63.0) (2026-10-21)
+
+### Features
+
+* add engine-backed mechanic previews ([#1069](https://github.com/witchesofthehill/manabrew/issues/1069)) ([bb27666](https://github.com/witchesofthehill/manabrew/commit/bb276666fe7afb42d194d30049b8dc8d39e76077))
+
+## Unreleased
+
+### Fixes
+
+* Allow combat damage to be divided freely among blockers under current Magic rules, while preserving lethal-damage requirements for trample.
+* Preserve each Room, split and aftermath half's frame color instead of inheriting the whole card's combined colors in hand and stack previews.
+* Highlight unlocked Room doors and the door represented on the stack in both card views, with outlines that include the collector strip.
+* Preserve localized Prototype abilities and reminders, including Japanese line wrapping.
+* Place localized leveler actions in the correct band without duplicating ability text.
+* Preserve the current mana cost when previewing copies of prototyped creatures.
+* Fix the Clippy build failure caused by oversized draft checkpoint agent variants.
+* Preserve translated leveler abilities and reminders in native card rendering.
+* Match Realistic print-dot previews to production without changing scan finish geometry.
+* Check relay support for new card materials before submitting a customized deck.
+
+## [3.62.2](https://github.com/witchesofthehill/manabrew/compare/v3.62.1...v3.62.2) (2026-10-21)
+
+### Fixes
+
+* forge-bot default ([#1087](https://github.com/witchesofthehill/manabrew/issues/1087)) ([6789e0b](https://github.com/witchesofthehill/manabrew/commit/6789e0b6ca17b967b0aeebcf137da53945e7fb3b))
+
+## [3.62.1](https://github.com/witchesofthehill/manabrew/compare/v3.62.0...v3.62.1) (2026-10-20)
+
+### Fixes
+
+* relative target svar cost reduction actionspace ([#1086](https://github.com/witchesofthehill/manabrew/issues/1086)) ([7a806ec](https://github.com/witchesofthehill/manabrew/commit/7a806ec16cf8e7d586511f74df61ae0e19d4c500))
+
+## [3.62.0](https://github.com/witchesofthehill/manabrew/compare/v3.61.1...v3.62.0) (2026-10-20)
+
+### Features
+
+* pauper commander ([#1080](https://github.com/witchesofthehill/manabrew/issues/1080)) ([50365f1](https://github.com/witchesofthehill/manabrew/commit/50365f163e81fd5d4884cc70c6a59b88459b6651))
+
 ## [3.61.1](https://github.com/witchesofthehill/manabrew/compare/v3.61.0...v3.61.1) (2026-10-19)
 
 ### Fixes

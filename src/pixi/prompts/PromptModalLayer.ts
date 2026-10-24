@@ -9,7 +9,7 @@ import { OPPONENT_SEATS } from "@/components/game/game.types";
 import { hexToNum } from "@/pixi/colorUtils";
 import { CardSprite } from "@/pixi/CardSprite";
 import { loadManaSymbolTexture } from "@/pixi/manaSymbolCache";
-import { readableTextColor } from "@/themes/gameTheme";
+import { ensureTextContrast, readableTextColor } from "@/themes/gameTheme";
 import { TOUCH_MOVE_SLOP_PX } from "@/lib/responsive";
 import {
   CARD_H,
@@ -77,6 +77,15 @@ const MODAL_SCROLL_SNAP_PIXELS = 0.5;
 type PromptModalHeaderLayout = "stacked" | "inline-guidance" | "choice-search";
 
 export abstract class PromptModalLayer extends PromptLayerBase {
+  private get successForeground(): string {
+    return ensureTextContrast(
+      this.theme.gameTheme.success,
+      this.theme.appTheme.muted,
+      this.theme.appTheme.foreground,
+      4.5,
+    );
+  }
+
   protected renderModal(): void {
     const input = this.spec!.currentPrompt!.input;
     const boardContext =
@@ -838,7 +847,15 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         });
       row.addChild(indicator);
       if (selected) {
-        const check = this.makeIcon("lucide-check", 12, this.theme.appTheme.background);
+        const check = this.makeIcon(
+          "lucide-check",
+          12,
+          readableTextColor(
+            this.theme.gameTheme.cardSelection,
+            this.theme.gameTheme.canvas.shadow,
+            this.theme.gameTheme.textOnTinted,
+          ),
+        );
         check.position.set(22, rowHeight / 2);
         row.addChild(check);
       }
@@ -946,7 +963,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
       const status = promptText(
         requirement,
         compactSelection ? 13 : 11,
-        canConfirm ? this.theme.gameTheme.success : this.theme.appTheme["muted-foreground"],
+        canConfirm ? this.successForeground : this.theme.appTheme["muted-foreground"],
         { weight: "600", width: availableWidth - confirmWidth - 20, truncate: true },
       );
       status.position.set(2, 10);
@@ -1409,7 +1426,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         ? `${cards.length} card${cards.length === 1 ? "" : "s"} revealed`
         : `${chosen.length} of ${max} selected`,
       11,
-      canConfirm ? this.theme.gameTheme.success : this.theme.appTheme["muted-foreground"],
+      canConfirm ? this.successForeground : this.theme.appTheme["muted-foreground"],
       { weight: "600" },
     );
     status.position.set(0, 10);
@@ -1495,7 +1512,15 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         .fill({ color: hexToNum(this.theme.gameTheme.cardSelection) })
         .stroke({ color: hexToNum(this.theme.appTheme.card), width: 2 });
       badge.eventMode = "none";
-      const check = this.makeIcon("lucide-check", 13, this.theme.appTheme.background);
+      const check = this.makeIcon(
+        "lucide-check",
+        13,
+        readableTextColor(
+          this.theme.gameTheme.cardSelection,
+          this.theme.gameTheme.canvas.shadow,
+          this.theme.gameTheme.textOnTinted,
+        ),
+      );
       check.position.set(width - 14, 14);
       tile.addChild(ring, badge, check);
     }
@@ -1739,7 +1764,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     const status = promptText(
       ready ? "Ready" : `${amount - total} left`,
       11,
-      ready ? this.theme.gameTheme.success : this.theme.appTheme["muted-foreground"],
+      ready ? this.successForeground : this.theme.appTheme["muted-foreground"],
       { weight: "600" },
     );
     status.position.set(previewX + (previewX > 0 ? 4 : 0), 11);
@@ -2023,7 +2048,13 @@ export abstract class PromptModalLayer extends PromptLayerBase {
       const rankText = promptText(
         String(index + 1),
         11,
-        index === 0 ? this.theme.appTheme.background : this.theme.appTheme.foreground,
+        index === 0
+          ? readableTextColor(
+              this.theme.gameTheme.cardRing,
+              this.theme.gameTheme.canvas.shadow,
+              this.theme.gameTheme.textOnTinted,
+            )
+          : this.theme.appTheme["muted-foreground"],
         { weight: "700" },
       );
       rankText.anchor.set(0.5);
@@ -2151,7 +2182,13 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         .fill(hexToNum(first ? this.theme.gameTheme.cardRing : this.theme.appTheme.muted));
       visual.rankText.text = String(previewIndex + 1);
       visual.rankText.tint = hexToNum(
-        first ? this.theme.appTheme.background : this.theme.appTheme.foreground,
+        first
+          ? readableTextColor(
+              this.theme.gameTheme.cardRing,
+              this.theme.gameTheme.canvas.shadow,
+              this.theme.gameTheme.textOnTinted,
+            )
+          : this.theme.appTheme["muted-foreground"],
       );
       visual.tile.accessibleTitle = `${visual.cardName}, position ${previewIndex + 1}`;
       if (id === cardId) {
@@ -2570,7 +2607,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     const status = promptText(
       `${cards.length - poolIds.length} of ${cards.length} placed`,
       11,
-      allPlaced ? this.theme.gameTheme.success : this.theme.appTheme["muted-foreground"],
+      allPlaced ? this.successForeground : this.theme.appTheme["muted-foreground"],
       { weight: "600" },
     );
     status.position.set(0, 3);
@@ -2906,7 +2943,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         alpha: complete ? 0.12 : 0.6,
       })
       .stroke({
-        color: hexToNum(complete ? this.theme.gameTheme.success : this.theme.appTheme.border),
+        color: hexToNum(complete ? this.successForeground : this.theme.appTheme.border),
         width: 1,
         alpha: 0.8,
       });
@@ -2917,14 +2954,14 @@ export abstract class PromptModalLayer extends PromptLayerBase {
           ? "Choose the first blocker"
           : `Choose blocker ${selectedCount + 1} of ${damageOrder.blockerCards.length}`,
       12,
-      complete ? this.theme.gameTheme.success : this.theme.appTheme.foreground,
+      complete ? this.successForeground : this.theme.appTheme.foreground,
       { weight: "600" },
     );
     progressText.position.set(12, 14);
     const progressCount = promptText(
       `${selectedCount}/${damageOrder.blockerCards.length}`,
       12,
-      complete ? this.theme.gameTheme.success : this.theme.appTheme["muted-foreground"],
+      complete ? this.successForeground : this.theme.appTheme["muted-foreground"],
       { weight: "700" },
     );
     progressCount.anchor.set(1, 0);
@@ -3061,7 +3098,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         : undefined,
       targets,
     };
-    const { body, footer } = this.createModalShell(width, height, presentation, true, 64, 38, true);
+    const { body, footer } = this.createModalShell(width, height, presentation, true, 64, 38);
     const assigned = Object.values(this.damageAssigned).reduce((sum, damage) => sum + damage, 0);
     const remaining = input.totalDamage - assigned;
     const waiting = this.spec!.action.isWaitingForResponse;
@@ -3089,8 +3126,8 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     }
     const guidance = promptText(
       input.defenderId
-        ? "Assign lethal damage in order, then send the rest to the defender."
-        : "Assign lethal damage to each blocker in order.",
+        ? "Divide damage freely. Assign lethal to all blockers before the defender."
+        : "Divide combat damage among the blockers as you choose.",
       10,
       this.theme.appTheme["muted-foreground"],
       { weight: "500", width: availableWidth, truncate: true },
@@ -3099,17 +3136,16 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     body.addChild(guidance);
 
     let y = 66;
-    assignees.forEach((id, index) => {
+    assignees.forEach((id) => {
       const damage = this.damageAssigned[id] ?? 0;
       const lethal =
         id === input.defenderId ? null : this.combatLethal(id, input.attackerHasDeathtouch);
-      const blocked = assignees
-        .slice(0, index)
-        .some(
-          (earlier) =>
-            earlier !== input.defenderId &&
-            (this.damageAssigned[earlier] ?? 0) <
-              this.combatLethal(earlier, input.attackerHasDeathtouch),
+      const blocked =
+        id === input.defenderId &&
+        input.blockerIds.some(
+          (blockerId) =>
+            (this.damageAssigned[blockerId] ?? 0) <
+            this.combatLethal(blockerId, input.attackerHasDeathtouch),
         );
       const label = this.combatLabel(id);
       const lethalReached = lethal != null && damage >= lethal;
@@ -3138,7 +3174,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
           : lethal == null
             ? ""
             : `, lethal damage ${lethal}`
-      }${blocked ? ", unavailable until the previous target has lethal damage" : ""}`;
+      }${blocked ? ", unavailable until all blockers have lethal damage assigned" : ""}`;
       rowBg.tabIndex = 0;
       const target: TargetRef =
         id === input.defenderId
@@ -3150,22 +3186,6 @@ export abstract class PromptModalLayer extends PromptLayerBase {
       rowBg.on("focusout", () => this.callbacks.onReferenceChange?.(null));
       body.addChild(rowBg);
 
-      const orderBadge = new Graphics()
-        .roundRect(10.5, y + 19.5, 23, 23, 11.5)
-        .fill({
-          color: hexToNum(damage > 0 ? rowColor : this.theme.appTheme.muted),
-          alpha: damage > 0 ? 0.24 : 0.72,
-        })
-        .stroke({
-          color: hexToNum(rowColor),
-          width: 1,
-          alpha: damage > 0 ? 0.75 : 0.55,
-        });
-      const order = promptText(String(index + 1), 10, this.theme.appTheme.foreground, {
-        weight: "700",
-      });
-      order.anchor.set(0.5);
-      order.position.set(22, y + 31);
       const defender = this.spec!.gameView.players.find((player) => player.id === id);
       const card = this.spec!.gameView.battlefield.find((candidate) => candidate.id === id);
       const name = promptText(label, 12, this.theme.appTheme.foreground, {
@@ -3173,7 +3193,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         width: availableWidth - 300,
         truncate: true,
       });
-      name.position.set(44, y + 8);
+      name.position.set(12, y + 8);
       const detail = defender
         ? `Defender · ${defender.life} → ${defender.life - damage} life`
         : card
@@ -3193,8 +3213,8 @@ export abstract class PromptModalLayer extends PromptLayerBase {
           truncate: true,
         },
       );
-      detailText.position.set(44, y + 36);
-      body.addChild(orderBadge, order, name, detailText);
+      detailText.position.set(12, y + 36);
+      body.addChild(name, detailText);
       if (lethalReached) {
         const skull = this.makeIcon(
           "lucide-skull",
@@ -3210,10 +3230,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         const lethalButton = this.makeButton(
           `LETHAL ${lethal}`,
           () => {
-            this.damageAssigned[id] = Math.min(
-              input.totalDamage,
-              damage + Math.max(0, lethal - damage),
-            );
+            this.damageAssigned[id] = Math.min(lethal, damage + remaining);
             this.normalizeDamage(input, assignees);
             this.rebuild();
           },
@@ -3288,7 +3305,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
       y += 68;
     });
 
-    const legal = remaining === 0 && this.damageLegallyOrdered(input, assignees);
+    const legal = remaining === 0 && this.damageAssignmentLegal(input);
     const confirmDisabled = waiting || !legal;
     const confirm = this.makeButton(
       "ASSIGN DAMAGE",
@@ -3311,7 +3328,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
         this.rebuild();
       },
       {
-        title: "Assign lethal damage in order, then assign the rest",
+        title: "Automatically distribute combat damage",
         icon: "lucide-wand-sparkles",
         outline: true,
         disabled: waiting,
@@ -3341,15 +3358,8 @@ export abstract class PromptModalLayer extends PromptLayerBase {
   }
 
   protected normalizeDamage(input: ChooseCombatDamageAssignmentInput, assignees: string[]): void {
-    let blocked = false;
-    for (const id of assignees) {
-      if (id === input.defenderId) {
-        if (blocked) this.damageAssigned[id] = 0;
-        continue;
-      }
-      if (blocked) this.damageAssigned[id] = 0;
-      if ((this.damageAssigned[id] ?? 0) < this.combatLethal(id, input.attackerHasDeathtouch))
-        blocked = true;
+    if (input.defenderId && !this.damageAssignmentLegal(input)) {
+      this.damageAssigned[input.defenderId] = 0;
     }
     let assigned = Object.values(this.damageAssigned).reduce((sum, damage) => sum + damage, 0);
     if (assigned <= input.totalDamage) return;
@@ -3361,18 +3371,15 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     }
   }
 
-  protected damageLegallyOrdered(
-    input: ChooseCombatDamageAssignmentInput,
-    assignees: string[],
-  ): boolean {
-    let blocked = false;
-    for (const id of assignees) {
-      const damage = this.damageAssigned[id] ?? 0;
-      if (blocked && damage > 0) return false;
-      if (id !== input.defenderId && damage < this.combatLethal(id, input.attackerHasDeathtouch))
-        blocked = true;
-    }
-    return true;
+  protected damageAssignmentLegal(input: ChooseCombatDamageAssignmentInput): boolean {
+    return (
+      !input.defenderId ||
+      (this.damageAssigned[input.defenderId] ?? 0) === 0 ||
+      input.blockerIds.every(
+        (id) =>
+          (this.damageAssigned[id] ?? 0) >= this.combatLethal(id, input.attackerHasDeathtouch),
+      )
+    );
   }
 
   protected autoAssignDamage(input: ChooseCombatDamageAssignmentInput, assignees: string[]): void {
@@ -3758,7 +3765,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
       color = this.theme.appTheme.destructive;
     } else if (gameOver.winnerId === gameOver.me.id) {
       heading = "Victory";
-      color = this.theme.gameTheme.success;
+      color = this.successForeground;
     } else if (gameOver.winnerId != null) {
       heading = "Defeat";
       color = this.theme.appTheme.destructive;
@@ -3807,7 +3814,7 @@ export abstract class PromptModalLayer extends PromptLayerBase {
     for (const player of players) {
       const isWinner = player.id === gameOver.winnerId;
       const rowColor = isWinner
-        ? this.theme.gameTheme.success
+        ? this.successForeground
         : player.status === "conceded"
           ? this.theme.appTheme.destructive
           : this.theme.appTheme.border;
@@ -3834,12 +3841,10 @@ export abstract class PromptModalLayer extends PromptLayerBase {
           : player.status === "lost"
             ? "LOST"
             : "PLAYING";
-      const status = promptText(
-        statusLabel,
-        9,
-        isWinner ? this.theme.gameTheme.success : rowColor,
-        { weight: "700", letterSpacing: 0.7 },
-      );
+      const status = promptText(statusLabel, 9, isWinner ? this.successForeground : rowColor, {
+        weight: "700",
+        letterSpacing: 0.7,
+      });
       status.anchor.set(1, 0.5);
       status.position.set(panelWidth - 30, playerY + 15);
       group.addChild(row, name, life, status);
