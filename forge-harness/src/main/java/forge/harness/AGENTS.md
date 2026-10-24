@@ -19,11 +19,9 @@ Dependency rule (do not violate): `parity → common`, `host → common`, `Main 
 
 ### Replay snapshots
 
-Threaded host snapshot RPCs read immutable seat views published by the game thread before prompts/revisions and final game over. Do not traverse live Forge zones from RPC threads: concession and advancement mutate them concurrently. Verification runs on the game thread; WebImage remains single-threaded.
+`GameCheckpoint` reconstructs pending decisions from a journal; `DecisionHistory` retains interactive rewind history. See `docs/DECISION_REPLAY.md` for isolation, delivery and verification contracts.
 
-During interactive reconstruction, defer UI snapshot serialization and checkpoint-row projection until the verified terminal boundary, before clearing `replaying`. Continue building every verification view at every input; those views also maintain remembered-hand information. The candidate's intermediate UI frames are never published.
-
-`GameCheckpoint` exports a collected journal prefix plus verification at a pending decision and restores it by full execution replay. It never applies Forge `GameState`. See `docs/DECISION_REPLAY.md` for the API and limits. `DecisionHistory` retains the private complete input prefix for interactive `journalRewind`, publishes redacted decision categories in `checkpoints`, and verifies replay in a fresh worker/process. `EngineCommands` shares threaded JVM/native command dispatch. Rewind directives are orchestration and never journal inputs. The legacy `GameSnapshot` path remains only when journal rewind is disabled and invalidates delivery journals.
+RPCs read immutable seat views published on the game thread before prompts, revisions and game over. Never traverse live Forge zones from RPC threads. During replay, defer UI views and checkpoint rows until the verified destination, but retain per-input verification and remembered-hand updates.
 
 ### Host payability probes must stay silent
 
@@ -157,12 +155,6 @@ Web Image's `Throwable.getStackTrace()` can return only the entry point (`WasmMa
 
 ### Engine decision journal
 
-`decisionJournal: true` makes the game thread record each consumed input with its prompt, in sequence from 1, before dispatch, including a state/RNG witness; the v2 first batch carries the exact start request. Journal games use native card ids (`ParityCardMap.useNativeIds`) so snapshot reads cannot shift prompt ids. Overflow (4096 entries or 8 MiB) or a snapshot restore permanently invalidates the history. Hosts either drain batches or read and cumulatively acknowledge them; never mix the two.
+Journal mode requires an isolated process, native card IDs and RNG seeding on both construction and execution threads. Name threaded engines `Game-*` so Forge's `GameAction.invoke` stays on the seeded thread. Never expose full journals or witnesses to players.
 
-`decisionJournalCommitBarrier: true` (threaded JVM/native only) holds startup until sequence 0 is acknowledged and each decision until its own; acknowledge only on a durable receipt. Journal starts reject internal AI, checkpoints and `checkpointExport`.
-
-The direct `build-wasm.sh` build reads `forge/forge-gui/res/languages` outside `FORGE_ASSETS`; with an empty submodule it compiles but fails at runtime, so put a languages directory on the classpath.
-
-Journal mode requires an isolated engine process: Forge's global IDs and caches are not per-session. Snapshot export runs on the game thread, queued with inputs; acknowledge any outstanding commit barrier before exporting. Seed the construction thread as well as the execution thread. Name threaded engines `Game-*` so Forge `GameAction.invoke` stays on the seeded thread.
-
-Interactive `journalRewind` owns drained delivery and rejects an external commit barrier. Its 64 MiB / 50,000-entry recording cap preserves previously retained rewind positions. Validate recorded seat metadata against the canonical prompt. Verification must preserve every viewer projection, hidden zone ordering and RNG position; `yarn bench:forge-verification` compares the original implementation with identical-witness assertions.
+The direct `build-wasm.sh` build also needs `forge/forge-gui/res/languages` on the classpath; `FORGE_ASSETS` alone is insufficient.

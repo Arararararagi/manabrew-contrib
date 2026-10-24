@@ -58,15 +58,11 @@ jobs:
               'src-tauri/',
               'manabrew-rs/crates/self-hosted-node/',
               'scripts/harness.mjs',
-              'scripts/engine-bench/forge-replay.mjs',
-              'scripts/engine-bench/forge-rewind.mjs',
-              'scripts/engine-bench/forge-supervisor.test.mjs',
-              'scripts/engine-bench/forge-verification-benchmark.mjs',
-              'scripts/engine-bench/java/**',
-              'scripts/engine-bench/forge-rewind-wasm.mjs',
-              'scripts/engine-bench/forge-decision-journal.mjs',
-              'scripts/engine-bench/journal-fixture.mjs',
-              'scripts/engine-bench/journal-harness.mjs',
+              'scripts/forge-tests/journal.mjs',
+              'scripts/forge-tests/replay.mjs',
+              'scripts/forge-tests/rewind.mjs',
+              'scripts/forge-tests/journal-fixture.mjs',
+              'scripts/forge-tests/journal-harness.mjs',
               '.github/workflows/build-checks.yml',
             ];
 
@@ -302,6 +298,9 @@ jobs:
           tool: wasm-pack@0.13.1
 
       - run: yarn
+
+      - name: Verify Forge supervisor lifecycle
+        run: yarn test:forge-supervisor
 
       # Mirrors what scripts/ensure-wasm.mjs hashes (its own stamp can't be
       # used here: it hashes card-data mtimes, which a fresh checkout always
@@ -770,29 +769,17 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
       - name: Build and test forge-harness
         run: node scripts/harness.mjs test
 
-      - name: Verify consumed decision replay
-        run: >-
-          node scripts/engine-bench/forge-decision-journal.mjs
-          --jar forge-harness/target/forge-harness-jar-with-dependencies.jar
-          --forge-home forge/forge-gui
-
-      - name: Verify replay snapshot restoration in fresh processes
-        run: yarn test:forge-replay
-
-      - name: Verify supervisor lifecycle
-        run: yarn test:forge-supervisor
+      - name: Verify journal delivery and replay
+        run: node scripts/forge-tests/journal.mjs && node scripts/forge-tests/replay.mjs
 
       - name: Verify subprocess deadlines and rewind failure recovery
         run: cargo test -p self-hosted-node --no-default-features --features java-forge --lib -- --test-threads=1
 
       - name: Verify journal rewind and failed replay recovery
-        run: yarn test:forge-rewind
+        run: node scripts/forge-tests/rewind.mjs
 
   forge-room-graalvm-windows:
     name: GraalVM build (Windows)
@@ -877,9 +864,6 @@ jobs:
           SELF_HOSTED_NODE_GRAAL_SMOKE: "1"
           RUST_LOG: self_hosted_node=info
         run: cargo run -p self-hosted-node --features graal-forge
-
-      - name: Verify native journal rewind
-        run: yarn test:forge-rewind --native target/debug/self-hosted-node.exe
 
       - name: Stub frontend dist for tauri context macro
         shell: bash
@@ -972,7 +956,7 @@ jobs:
         run: cargo run --release -p self-hosted-node --features graal-forge
 
       - name: Verify native journal rewind
-        run: yarn test:forge-rewind --native target/release/self-hosted-node
+        run: node scripts/forge-tests/rewind.mjs --native target/release/self-hosted-node
 
   forge-room-graalvm-macos:
     name: GraalVM build (macOS)
@@ -1053,9 +1037,6 @@ jobs:
           SELF_HOSTED_NODE_GRAAL_SMOKE: "1"
           RUST_LOG: self_hosted_node=info
         run: cargo run -p self-hosted-node --features graal-forge
-
-      - name: Verify native journal rewind
-        run: yarn test:forge-rewind --native target/debug/self-hosted-node
 
       # `cargo build` of the tauri crate runs `generate_context!`, which embeds
       # `frontendDist` (../dist). Stub it so the link test doesn't drag in the
@@ -1174,5 +1155,5 @@ jobs:
           exec docker run --rm -i --memory 2g --label manabrew-rewind-regression manabrew-node:pr "$@"
           EOF
           chmod +x tmp/forge-image-worker
-          node scripts/engine-bench/forge-rewind.mjs \
+          node scripts/forge-tests/rewind.mjs \
             --native tmp/forge-image-worker --forge-home /build/forge/forge-gui

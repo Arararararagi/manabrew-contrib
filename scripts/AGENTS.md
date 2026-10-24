@@ -77,4 +77,4 @@ Never use `--no-verify` to bypass the commit-msg or pre-commit hooks. If a hook 
 
 `parity-repair-agent.py` requires `PARITY_AUTH` in the environment as `username:password`. Supply it through local secrets or CI secrets. The previously committed dashboard credential must be rotated because it remains in Git history.
 
-The decision journal checks are `bench:forge-journal` (delivery and barriers) and `test:forge-replay` (real Forge, independent-process snapshot restoration). `test:forge-rewind` exercises interactive votes, fresh-engine reconstruction and failure recovery (`--native <node binary>` selects Graal). `test:forge-rewind-wasm` uses the actual WebImage and nested Node workers. Use Node 24 and JDK 18–21. The JVM checks run in the Forge harness CI job, including on submodule changes. See `docs/DECISION_REPLAY.md`. Relay journal/takeover probes are preserved on `preserve/pr-1026-host-recovery` for the follow-up.
+Forge journal/rewind regression scripts live in `scripts/forge-tests/`; commands and runtime requirements are listed in `docs/DECISION_REPLAY.md`.

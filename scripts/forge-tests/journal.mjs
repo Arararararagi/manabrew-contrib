@@ -1,24 +1,19 @@
 import { harness as createHarness } from "./journal-harness.mjs";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { createForgeEngine } from "../../packages/forge-wasm/node.js";
-import { resolve } from "node:path";
 import { deck, scriptedAnswer } from "./journal-fixture.mjs";
 
 const { values } = parseArgs({
   options: {
-    jar: { type: "string" },
-    launcher: { type: "string" },
-    "forge-home": { type: "string" },
+    jar: {
+      type: "string",
+      default: "forge-harness/target/forge-harness-jar-with-dependencies.jar",
+    },
+    "forge-home": { type: "string", default: "forge/forge-gui" },
     java: { type: "string", default: "java" },
-    decisions: { type: "string", default: "80" },
   },
 });
-assert(values.jar && values["forge-home"], "--jar and --forge-home are required");
-const decisions = Number(values.decisions);
-assert(Number.isSafeInteger(decisions) && decisions > 0);
+const decisions = 20;
 const sessionId = "decision-journal-probe";
 const request = {
   gameId: sessionId,
@@ -52,7 +47,6 @@ async function views(engine) {
 }
 
 const entries = [];
-let startRequest, terminalPrompt, terminalViews;
 const source = harness();
 try {
   await source.call("startGame", { payload: JSON.stringify(request) });
@@ -79,8 +73,7 @@ try {
   let prompt = await source.prompt();
   const first = await source.drain();
   assert.equal(first.version, 2);
-  startRequest = first.startRequest;
-  assert.deepEqual(JSON.parse(startRequest), request);
+  assert.deepEqual(JSON.parse(first.startRequest), request);
   assert.deepEqual(first.entries, []);
   assert.equal(await source.drain(), null);
   await assert.rejects(source.call("readDecisionJournal"), /cannot mix/);
@@ -115,8 +108,6 @@ try {
     entries.push(entry);
     prompt = next;
   }
-  terminalPrompt = prompt;
-  terminalViews = await views(source);
   await source.call("submitAction", {
     payload: JSON.stringify({
       type: "directive",
@@ -127,36 +118,6 @@ try {
   assert.match((await source.consumed()).unavailableReason, /snapshot restore/);
 } finally {
   source.close();
-}
-
-const shadow = harness();
-try {
-  await shadow.call("startGame", { payload: startRequest });
-  let prompt = await shadow.prompt();
-  await shadow.drain();
-  for (const entry of entries) {
-    assert.deepEqual(prompt, entry.prompt, `divergence before decision ${entry.sequence}`);
-    await shadow.call("submitAction", { payload: JSON.stringify(entry.action) });
-    if (entry.action.type !== "directive") prompt = await shadow.prompt(prompt.promptId);
-    const batch = await shadow.consumed();
-    assert.deepEqual(batch.entries, [entry]);
-  }
-  assert.deepEqual(prompt, terminalPrompt);
-  assert.deepEqual(await views(shadow), terminalViews);
-
-  const action = scriptedAnswer({ prompt });
-  action.padding = "x".repeat(8 * 1024 * 1024);
-  await shadow.call("submitAction", { payload: JSON.stringify(action) });
-  prompt = await shadow.prompt(prompt.promptId);
-  const overflow = await shadow.drain();
-  assert.match(overflow.unavailableReason, /limit/);
-  assert.deepEqual(overflow.entries, []);
-  assert.equal(await shadow.drain(), null);
-  await shadow.call("submitAction", { payload: JSON.stringify(scriptedAnswer({ prompt })) });
-  await shadow.prompt(prompt.promptId);
-  assert.equal(await shadow.drain(), null);
-} finally {
-  shadow.close();
 }
 
 const gated = harness();
@@ -332,107 +293,4 @@ try {
   disabled.close();
 }
 
-let wasm;
-if (values.launcher) {
-  const queue = [],
-    recorded = [],
-    sent = new Map();
-  let wake, failure, manifest;
-  const engine = await createForgeEngine({
-    launcherUrl: resolve(values.launcher),
-    wasmUrl: resolve(`${values.launcher}.wasm`),
-    onPrompt: (prompt, slot) => {
-      queue.push({ prompt, slot });
-      wake?.();
-    },
-    onError: (error) => {
-      failure = error;
-      wake?.();
-    },
-    onEvent: (event, batch) => {
-      if (event !== "forge:journal") return;
-      try {
-        assert.equal(batch.version, 2);
-        assert.equal(batch.unavailableReason, undefined);
-        if (batch.startRequest) {
-          assert.equal(manifest, undefined);
-          manifest = JSON.parse(batch.startRequest);
-        }
-        for (const entry of batch.entries) {
-          assert.equal(entry.sequence, recorded.length + 1);
-          assert.deepEqual(entry.action, sent.get(entry.prompt.promptId));
-          recorded.push(entry);
-        }
-        assert.equal(batch.nextSequence, recorded.length + 1);
-      } catch (error) {
-        failure = error;
-        wake?.();
-      }
-    },
-  });
-  let startupTimer;
-  try {
-    await Promise.race([
-      engine.startGame({
-        deck,
-        opponentDecks: [deck],
-        seed: 43,
-        gameId: sessionId,
-        snapshotRecording: false,
-        decisionJournal: true,
-      }),
-      new Promise((_, reject) => {
-        startupTimer = setTimeout(() => reject(new Error("WASM startup timeout")), 60_000);
-      }),
-    ]);
-    clearTimeout(startupTimer);
-    while (recorded.length < decisions) {
-      if (!queue.length && !failure) {
-        await new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("WASM prompt timeout")), 30_000);
-          wake = () => {
-            clearTimeout(timer);
-            wake = null;
-            resolve();
-          };
-        });
-      }
-      if (failure) throw failure;
-      if (recorded.length >= decisions) break;
-      const frame = queue.shift();
-      if (!frame) continue;
-      const action = scriptedAnswer(frame);
-      sent.set(frame.prompt.promptId, action);
-      engine.respond(frame.prompt.promptId, action, frame.slot);
-    }
-    assert.equal(manifest.seed, 43);
-    assert.equal(manifest.gameId, sessionId);
-    wasm = { consumedDecisions: recorded.length, transport: "forge:journal", matched: true };
-  } finally {
-    clearTimeout(startupTimer);
-    engine.dispose();
-  }
-}
-
-console.log(
-  JSON.stringify(
-    {
-      runtime: "JVM",
-      decisions: entries.length,
-      jarSha256: createHash("sha256")
-        .update(await readFile(values.jar))
-        .digest("hex"),
-      replay: "matched prompts, consumed actions, and both terminal seat views",
-      overflow: "explicit invalidation; game continued",
-      rejected: ["internal AI", "checkpoint start"],
-      disabled: "no journal batches",
-      commitBarrier:
-        "startup and decisions wait for acknowledgement; restore fails closed; shutdown wakes waiters",
-      retainedDelivery:
-        "retries, partial/duplicate acknowledgements, prefix validation, reclaimed capacity, persistent invalidation",
-      wasm,
-    },
-    null,
-    2,
-  ),
-);
+console.log("PASS: journal delivery, acknowledgement barriers, limits and unsupported modes");

@@ -96,11 +96,11 @@ Call `dispose()` to terminate the worker. A running Forge game is synchronous in
 
 `directive()` sends an out-of-band instruction such as a concession or a restore request. Each seat has its own directive lane, apart from its prompt buffer, and the engine reads every lane while it waits on any prompt, so a directive lands at once, even while another seat is deciding.
 
-## Experimental engine decision journal
+## Decision journal
 
-`decisionJournal: true` emits `forge:journal` v2 batches (`ForgeDecisionJournalBatch`) through `onEvent`: the exact start request as a string, then each consumed input with its sequence, seat, prompt and state/RNG verification witness. Raw snapshot export/import uses the threaded JVM harness API. Batches hold hidden information, so keep them with trusted hosts. Overflow or a snapshot restore sets a permanent `unavailableReason`.
+`decisionJournal: true` emits `forge:journal` v2 batches through `onEvent`. Batches contain the start request, consumed inputs and verification witnesses, including hidden information; only trusted hosts may receive them. Overflow or legacy snapshot restoration sets `unavailableReason`.
 
-`journalRewind: true` keeps that private history inside a supervisor and exposes redacted decision positions through `gameView.decisionHistory` and `gameView.checkpoints`. Restore directives require the active human seats' votes. A replacement engine replays and verifies the selected boundary before promotion; failure resumes the original. Directive lanes survive promotion, while prompt IDs advance. The 64 MiB / 50,000-entry limit stops further recording without invalidating retained positions. This mode requires external decision makers and does not emit raw `forge:journal` events.
+`journalRewind: true` keeps the journal private and exposes redacted history through `gameView.checkpoints`. Restore votes select a position; a fresh engine replays and verifies it before replacing the source. This requires external decision makers. The 64 MiB / 50,000-entry cap stops recording but preserves retained rewind positions.
 
 ## Types
 

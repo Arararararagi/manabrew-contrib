@@ -2881,8 +2881,7 @@ impl SubprocessBridge {
             .unwrap_or_else(|| Instant::now() + CALL_TIMEOUT)
             .min(Instant::now() + CALL_TIMEOUT);
         let result = self.exchange(request_json, deadline);
-        // A timed-out RPC has no request ID. Reusing the stream could accept its
-        // late reply as the next result, so any transport failure kills it.
+        // Uncorrelated late replies make a failed transport unsafe to reuse.
         if self.failed {
             let _ = self.child.kill();
         }

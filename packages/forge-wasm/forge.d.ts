@@ -72,7 +72,6 @@ export interface ForgeStartGameOptions {
   snapshotRecording?: boolean;
   decisionJournal?: boolean;
   journalRewind?: boolean;
-  /** Pins the engine's game id, which a decision journal records. */
   gameId?: string;
 }
 
@@ -96,7 +95,6 @@ export interface ForgeStartMultiplayerGameOptions {
   snapshotRecording?: boolean;
   decisionJournal?: boolean;
   journalRewind?: boolean;
-  /** Pins the engine's game id, which a decision journal records. */
   gameId?: string;
 }
 

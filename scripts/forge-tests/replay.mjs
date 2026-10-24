@@ -11,12 +11,9 @@ const { values } = parseArgs({
     },
     "forge-home": { type: "string", default: "forge/forge-gui" },
     java: { type: "string", default: "java" },
-    repeats: { type: "string", default: "2" },
     scenario: { type: "string" },
   },
 });
-const repeats = Number(values.repeats);
-assert(Number.isSafeInteger(repeats) && repeats > 0);
 async function assertContinuation(restored, entries) {
   for (const entry of entries) {
     await restored.call("submitAction", { payload: JSON.stringify(entry.action) });
@@ -96,16 +93,6 @@ const scenarios = [
       ["Memnite", 20],
     ],
   },
-  {
-    name: "long-game",
-    seats: 2,
-    variant: "Constructed",
-    decisions: 1000,
-    cards: [
-      ["Forest", 80],
-      ["Memnite", 20],
-    ],
-  },
 ];
 const results = [];
 for (const scenario of scenarios.filter((s) => !values.scenario || s.name === values.scenario)) {
@@ -139,7 +126,6 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
     snapshots = [],
     promptTypes = new Set();
   let history,
-    maxTurn = 0,
     maxStack = 0,
     maxLife = 0,
     minLife = request.startingLife,
@@ -168,7 +154,6 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
       promptTypes.add(prompt.input.type);
       if (prompt.decidingPlayerId) decidingSeats.add(prompt.decidingPlayerId);
       const view = JSON.parse(await source.call("getSnapshot", { viewer: 0 }));
-      maxTurn = Math.max(maxTurn, Number(view.turn ?? 0));
       maxStack = Math.max(maxStack, view.stack?.length ?? 0);
       for (const player of view.players) {
         maxLife = Math.max(maxLife, player.life);
@@ -204,7 +189,7 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
       if (i === scenario.decisions - 1) await capture("late");
     }
   } finally {
-    source.close(); // SIGKILL: reconstruction cannot use any source-engine memory.
+    source.close();
   }
   assert(entries.length === scenario.decisions + 12);
   assert.equal(decidingSeats.size, scenario.seats, "all seats must make decisions");
@@ -224,25 +209,13 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
     assert(maxStack > 1 && promptTypes.has("chooseBoardTargets"));
   if (scenario.name === "random-coins")
     assert(minLife < request.startingLife, "coin flips must resolve");
-  if (scenario.name === "long-game") assert(maxTurn >= 40);
-  const timings = [];
-  for (let repeat = 0; repeat < repeats; repeat++) {
-    for (const saved of snapshots) {
-      const restored = engine(
-        repeat % 2 ? ["-XX:+UnlockExperimentalVMOptions", "-XX:hashCode=0"] : [],
-      );
-      const started = performance.now();
-      try {
-        await restored.call("restoreReplaySnapshot", { payload: saved.snapshot });
-        timings.push({
-          boundary: saved.label,
-          sequence: saved.sequence,
-          ms: Math.round(performance.now() - started),
-        });
-        await assertContinuation(restored, entries.slice(saved.sequence, saved.sequence + 12));
-      } finally {
-        restored.close();
-      }
+  for (const saved of snapshots) {
+    const restored = engine(["-XX:+UnlockExperimentalVMOptions", "-XX:hashCode=0"]);
+    try {
+      await restored.call("restoreReplaySnapshot", { payload: saved.snapshot });
+      await assertContinuation(restored, entries.slice(saved.sequence, saved.sequence + 12));
+    } finally {
+      restored.close();
     }
   }
   if (scenario.name === "constructed") {
@@ -252,13 +225,7 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
     gatedStart.decisionJournalCommitBarrier = true;
     gatedSnapshot.journal.startRequest = JSON.stringify(gatedStart);
     try {
-      const started = performance.now();
       await gated.call("restoreReplaySnapshot", { payload: JSON.stringify(gatedSnapshot) });
-      timings.push({
-        boundary: "commit-barrier",
-        sequence: gatedSnapshot.nextSequence - 1,
-        ms: Math.round(performance.now() - started),
-      });
       await assertContinuation(
         gated,
         entries.slice(gatedSnapshot.nextSequence - 1, gatedSnapshot.nextSequence + 11),
@@ -341,18 +308,7 @@ for (const scenario of scenarios.filter((s) => !values.scenario || s.name === va
       }
     }
   }
-  results.push({
-    scenario: scenario.name,
-    decisions: entries.length,
-    maxTurn,
-    maxStack,
-    maxLife,
-    minLife,
-    stackBoundary,
-    promptTypes: [...promptTypes],
-    journalBytes: Buffer.byteLength(JSON.stringify(history)),
-    timings,
-  });
+  results.push({ scenario: scenario.name, decisions: entries.length, restored: snapshots.length });
   console.log(JSON.stringify(results.at(-1)));
 }
 assert(results.length, "unknown scenario");

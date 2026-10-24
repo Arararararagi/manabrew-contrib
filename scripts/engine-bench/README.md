@@ -230,13 +230,3 @@ Everything is behind `-Dforge.engineCounters=true`, a static final read at class
 init, so it folds away when it is off. An earlier round of this used atomics and
 two `nanoTime` calls on every `checkStaticAbilities` and had to be reverted
 (forge `9d14d1511bf`).
-
-## Decision journal
-
-`yarn bench:forge-journal --jar <jar> --forge-home <forge-gui>` checks consumed-input replay and acknowledgement barriers. `yarn test:forge-replay` checks reconstruction at pending decisions in fresh JVMs, followed by continued execution. It reports journal size and restore time. See [the replay contract and audit](../../docs/DECISION_REPLAY.md) for supported runtimes, scenarios, limitations and the preserved host-recovery follow-up.
-
-`yarn test:forge-rewind` checks interactive journal rewind at four consumed positions in fresh JVMs, including continuation and failed reconstruction. Pass `--native target/debug/self-hosted-node` to use the native worker executable instead. `yarn test:forge-rewind-wasm` checks two worker replacements and continued execution against a freshly built WebImage. Both require Node 24; build the harness/native/WebImage artifacts appropriate to the selected runtime first.
-
-`yarn test:forge-supervisor` exercises worker failures, promotion, queued commands/directives and UI teardown without compiling WebImage. `yarn bench:forge-verification --java-home <JDK>` compares the original and optimized verification on four-player Commander board-size fixtures, checks identical witnesses, and reports median/p95 time and per-call allocation. See `docs/DECISION_REPLAY.md` for the measured results and fixture limits.
-
-`yarn bench:forge-rewind --native target/debug/self-hosted-node --save-fixture tmp/rewind-fixture.json` measures five fresh-process restores to input 400 in a four-player Commander game. It separates process/asset startup from verified replay and checks eight subsequent inputs and boards. After a rebuild, use `--fixture tmp/rewind-fixture.json` to replay the identical recorded history. Omit `--native` and pass `--java <java>` for JVM; `--decisions`, `--samples` and `--scenario hidden` select the boundary, sample count and a Ponder/Brainstorm fixture. Generated fixtures contain the private journal and are local benchmark artifacts.

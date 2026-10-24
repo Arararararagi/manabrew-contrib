@@ -278,8 +278,7 @@ public final class ManaBrewInteractiveSession {
         return snapshotJson(viewer);
     }
 
-    // RPC readers never traverse the mutable game. Publish complete seat views
-    // before exposing a prompt/revision, and before reporting final game over.
+    // RPC readers must never traverse the mutable game.
     private void publishSnapshots() {
         if (bridge != null) return;
         final List<String> snapshots = new ArrayList<>();
