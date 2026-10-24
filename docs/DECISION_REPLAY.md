@@ -72,6 +72,23 @@ RPC reads use these published views: traversing live Forge zones concurrently wi
 advancement or concession can throw `ConcurrentModificationException` and end the
 authoritative game. Single-threaded WebImage reads remain synchronous.
 
+Interactive candidates defer UI snapshots and checkpoint-row projection until the
+verified destination. Every intermediate prompt, state/RNG witness and remembered
+hand projection is still verified. The final UI views and retained journal rows
+are built before `replayReady` becomes true, so promotion sees a complete destination.
+
+Measured locally on macOS/ARM64 with the GraalVM 21 native engine: five fresh-process
+rewinds to input 400 in a four-player Commander fixture, replaying the exact same
+saved history before and after deferring UI serialization. Median startup was
+1.606 → 1.555 seconds, verified replay 8.047 → 3.605 seconds, and total time to ready
+9.638 → 5.160 seconds (46% lower). Each run also checked eight continued inputs and
+boards. These are local fixture timings, not staging latency; replay still starts
+from game creation, and cold engine/asset initialization remains. Reproduce with
+`yarn bench:forge-rewind --native target/debug/self-hosted-node --save-fixture tmp/rewind-fixture.json`,
+then after rebuilding use `--fixture tmp/rewind-fixture.json` instead. The hidden-choice
+fixture (`--scenario hidden`) compares Ponder/Brainstorm reconstruction, subsequent
+boards and retained journal rows against the live source.
+
 Rewind temporarily holds two engines and their card databases. Capacity planning
 must account for this peak; shared-isolate/JVM multiplexing settings no longer
 apply to hosted gameplay. No relay ownership, crash takeover, durable saved-game

@@ -21,6 +21,8 @@ Dependency rule (do not violate): `parity → common`, `host → common`, `Main 
 
 Threaded host snapshot RPCs read immutable seat views published by the game thread before prompts/revisions and final game over. Do not traverse live Forge zones from RPC threads: concession and advancement mutate them concurrently. Verification runs on the game thread; WebImage remains single-threaded.
 
+During interactive reconstruction, defer UI snapshot serialization and checkpoint-row projection until the verified terminal boundary, before clearing `replaying`. Continue building every verification view at every input; those views also maintain remembered-hand information. The candidate's intermediate UI frames are never published.
+
 `GameCheckpoint` exports a collected journal prefix plus verification at a pending decision and restores it by full execution replay. It never applies Forge `GameState`. See `docs/DECISION_REPLAY.md` for the API and limits. `DecisionHistory` retains the private complete input prefix for interactive `journalRewind`, publishes redacted decision categories in `checkpoints`, and verifies replay in a fresh worker/process. `EngineCommands` shares threaded JVM/native command dispatch. Rewind directives are orchestration and never journal inputs. The legacy `GameSnapshot` path remains only when journal rewind is disabled and invalidates delivery journals.
 
 ### Host payability probes must stay silent

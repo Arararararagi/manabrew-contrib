@@ -2135,6 +2135,7 @@ public final class ManaBrewInteractiveSession {
                 } else {
                     restoreVoteView = restoredVote;
                     if (restoredVote != null) restoreVoteCount = ((Number) restoredVote.get("voteId")).intValue();
+                    publishCheckpointViews();
                     publishSnapshots();
                     replaying = false;
                     if (bridge != null) bridge.replayReady();
@@ -2208,7 +2209,7 @@ public final class ManaBrewInteractiveSession {
                             checkpoint.decidingPlayer = promptedPlayerIndex;
                             checkpoints.addLast(checkpoint);
                             while (checkpoints.size() > 200) checkpoints.removeFirst();
-                            publishCheckpointViews();
+                            if (!replaying) publishCheckpointViews();
                         }
                     }
                 }
@@ -2288,7 +2289,7 @@ public final class ManaBrewInteractiveSession {
     }
 
     private void announceState() {
-        publishSnapshots();
+        if (!replaying) publishSnapshots();
         stateRevision++;
         if (bridge != null && !replaying) {
             bridge.publishState();
@@ -3240,7 +3241,7 @@ public final class ManaBrewInteractiveSession {
                 sourceCard(promptedPlayerIndex, sourceCardId),
                 sourceAbilityText(sourceCardId),
                 input);
-        publishSnapshots();
+        if (!replaying) publishSnapshots();
         latestPromptJson = prompt;
     }
 
