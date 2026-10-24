@@ -234,3 +234,5 @@ two `nanoTime` calls on every `checkStaticAbilities` and had to be reverted
 ## Decision journal
 
 `yarn bench:forge-journal --jar <jar> --forge-home <forge-gui>` checks consumed-input replay and acknowledgement barriers. `yarn test:forge-replay` checks reconstruction at pending decisions in fresh JVMs, followed by continued execution. It reports journal size and restore time. See [the replay contract and audit](../../docs/DECISION_REPLAY.md) for supported runtimes, scenarios, limitations and the preserved host-recovery follow-up.
+
+`yarn test:forge-rewind` checks interactive journal rewind at four consumed positions in fresh JVMs, including continuation and failed reconstruction. Pass `--native target/debug/self-hosted-node` to use the native worker executable instead. `yarn test:forge-rewind-wasm` checks two worker replacements and continued execution against a freshly built WebImage. Both require Node 24; build the harness/native/WebImage artifacts appropriate to the selected runtime first.

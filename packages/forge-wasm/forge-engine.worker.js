@@ -5,6 +5,7 @@ let wasmUrl = null;
 
 let booting = null;
 let gameRunning = false;
+let supervised = false;
 
 const postEvent = (event, payload) => self.postMessage({ type: "event", event, payload });
 
@@ -20,6 +21,114 @@ for (const level of ["log", "warn", "error"]) {
 const postResponse = (requestId, payload) =>
   self.postMessage({ type: "response", requestId, payload });
 const postError = (requestId, error) => self.postMessage({ type: "response", requestId, error });
+
+function supervise(command) {
+  supervised = true;
+  let active;
+  let candidate;
+  let timer;
+
+  const fail = (message) => {
+    candidate?.worker.terminate();
+    candidate = null;
+    clearTimeout(timer);
+    Atomics.store(new Int32Array(active.control), 0, 1);
+    Atomics.notify(new Int32Array(active.control), 0);
+    postEvent("forge:log", { level: "error", text: `Rewind failed: ${message}` });
+  };
+
+  const launch = (snapshot) => {
+    const worker = new Worker(self.location.href);
+    const control = new SharedArrayBuffer(4);
+    const promptOffset = snapshot
+      ? active.promptOffset + snapshot.lastPromptId + 1 - snapshot.prompt.promptId
+      : 0;
+    const instance = { worker, control, buffered: [], promptOffset };
+    if (snapshot) candidate = instance;
+    else active = instance;
+    worker.onerror = (event) => {
+      if (instance === candidate) fail(event.message);
+      else if (instance === active) {
+        postEvent("game:forced_end", { reason: "worker_error", message: event.message });
+      }
+    };
+    worker.onmessage = ({ data }) => {
+      if (instance !== active && instance !== candidate) return;
+      if (data.type === "event" && data.event === "worker:init") {
+        worker.postMessage({
+          ...command,
+          args: {
+            ...command.args,
+            forgeLeaf: true,
+            rewindControl: control,
+            promptOffset,
+            replaySnapshot: snapshot,
+          },
+        });
+        return;
+      }
+      if (data.type === "event" && data.event === "forge:rewind" && instance === active) {
+        if (candidate) return;
+        try {
+          launch(data.payload);
+          timer = setTimeout(() => fail("Replay timed out. The current game was kept."), 120000);
+        } catch (error) {
+          fail(String(error));
+        }
+        return;
+      }
+      if (instance === candidate) {
+        if (data.error || data.event === "game:forced_end" || data.event === "game:over") {
+          fail(data.error || data.payload?.message || "Replay ended before verification.");
+        } else if (data.event === "forge:replay_ready") {
+          clearTimeout(timer);
+          active.worker.terminate();
+          active = instance;
+          candidate = null;
+          for (const message of instance.buffered) self.postMessage(message);
+          instance.buffered = [];
+          Atomics.store(new Int32Array(control), 0, 2);
+          Atomics.notify(new Int32Array(control), 0);
+        } else if (["game:sab", "game:remote_sab", "game:directive_lanes"].includes(data.event)) {
+          instance.buffered.push(data);
+        }
+        return;
+      }
+      if (data.event !== "forge:journal") self.postMessage(data);
+    };
+    return instance;
+  };
+
+  try {
+    launch(null);
+  } catch (error) {
+    postError(command.requestId, String(error));
+    return;
+  }
+  self.onmessage = ({ data }) => {
+    if (data.command === "end_game") {
+      clearTimeout(timer);
+      candidate?.worker.terminate();
+      active.worker.terminate();
+      candidate = null;
+      postResponse(data.requestId, null);
+    } else {
+      active.worker.postMessage(data);
+    }
+  };
+}
+
+function runGame(request, args) {
+  self.__forgeRewindControl = args.rewindControl;
+  self.__forgePromptOffset = args.promptOffset ?? 0;
+  if (args.replaySnapshot) {
+    request = JSON.parse(args.replaySnapshot.journal.startRequest);
+    request.replaySnapshot = args.replaySnapshot;
+  }
+  const result = self.__forgeStartGame(JSON.stringify(request));
+  const error = result && JSON.parse(String(result)).error;
+  if (error) throw new Error(error);
+}
 
 function boot() {
   if (booting) return booting;
@@ -152,6 +261,7 @@ async function startGame(requestId, args) {
     seed: gameSeed(args),
     snapshotRecording: !args || args.snapshotRecording !== false,
     decisionJournal: args?.decisionJournal === true,
+    journalRewind: args?.journalRewind === true,
     players: [
       {
         name: "You",
@@ -187,7 +297,7 @@ async function startGame(requestId, args) {
   // Blocks the worker for the whole game, which is the point: the engine parks
   // on Atomics.wait whenever the human seat has to decide.
   try {
-    self.__forgeStartGame(JSON.stringify(request));
+    runGame(request, args);
     gameRunning = false;
     postEvent("game:over", {});
   } catch (e) {
@@ -250,6 +360,7 @@ async function startMultiplayerGame(requestId, args) {
     seed: gameSeed(args),
     snapshotRecording: !args || args.snapshotRecording !== false,
     decisionJournal: args?.decisionJournal === true,
+    journalRewind: args?.journalRewind === true,
     players: decks.map((deck, index) => ({
       name: playerNames[index] || `Player ${index + 1}`,
       ai: forgeAiSeats.has(index),
@@ -266,7 +377,7 @@ async function startMultiplayerGame(requestId, args) {
   );
 
   try {
-    self.__forgeStartGame(JSON.stringify(request));
+    runGame(request, args);
     gameRunning = false;
     postEvent("game:over", {});
   } catch (e) {
@@ -281,6 +392,15 @@ async function startMultiplayerGame(requestId, args) {
 self.onmessage = (e) => {
   const msg = e.data;
   if (!msg || msg.type !== "command") return;
+  if (
+    !supervised &&
+    !msg.args?.forgeLeaf &&
+    msg.args?.journalRewind &&
+    (msg.command === "start_game" || msg.command === "start_multiplayer_game")
+  ) {
+    supervise(msg);
+    return;
+  }
   if (msg.command === "start_game") return void startGame(msg.requestId, msg.args);
   if (msg.command === "start_multiplayer_game") {
     return void startMultiplayerGame(msg.requestId, msg.args);

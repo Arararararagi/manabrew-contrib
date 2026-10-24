@@ -3,14 +3,14 @@
 #[cfg(forge_backend)]
 use std::collections::HashMap;
 use std::env;
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc as std_mpsc;
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 use std::sync::mpsc::RecvTimeoutError;
 #[cfg(forge_backend)]
 use std::sync::mpsc::TryRecvError;
@@ -38,9 +38,9 @@ use manabrew_agent_interface::prompt::{
 #[cfg(feature = "java-forge")]
 use manabrew_agent_interface::prompt::{MulliganOutput, MulliganPutBackOutput};
 use serde::Serialize;
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 use serde_json::json;
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 use serde_json::Value;
 #[cfg(forge_backend)]
 use tracing::warn;
@@ -599,46 +599,12 @@ impl JavaEngineHandle {
     }
 }
 
-#[cfg(feature = "java-forge")]
-static JAVA_ENGINE: std::sync::OnceLock<Arc<JavaEnginePool>> = std::sync::OnceLock::new();
-
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 pub fn init_engine() -> Result<(), String> {
-    if JAVA_ENGINE.get().is_some() {
-        return Ok(());
-    }
     let config = JavaRuntimeConfig::from_env();
-    // SELF_HOSTED_NODE_MAX_GAMES is the concurrent-session ceiling for this node.
-    // SELF_HOSTED_NODE_GAMES_PER_JVM multiplexes that many sessions into each
-    // subprocess (the engine is concurrency-safe since the endstep patches), so
-    // the pool spawns ceil(max_games / games_per_jvm) processes. Default 1 keeps
-    // the historical one-subprocess-per-game shape.
-    let max_sessions = env::var("SELF_HOSTED_NODE_MAX_GAMES")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|n| *n >= 1)
-        .unwrap_or(1);
-    let sessions_per_process = env::var("SELF_HOSTED_NODE_GAMES_PER_JVM")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|n| *n >= 1)
-        .unwrap_or(1);
-    let pool = JavaEnginePool::start(&config, max_sessions, sessions_per_process)?;
-    JAVA_ENGINE
-        .set(pool)
-        .map_err(|_| "java engine already initialized".to_string())
-}
-
-#[cfg(all(feature = "graal-forge", not(feature = "java-forge")))]
-pub fn init_engine() -> Result<(), String> {
-    // Loading the card database into the isolate takes tens of seconds on a
-    // small box. Pay it here, before any room is advertised, rather than
-    // leaving it for whoever starts the first game.
-    if shared_isolate_enabled() {
-        drop(GraalEngineHandle::create(
-            &JavaRuntimeConfig::from_env().assets_dir,
-        )?);
-    }
+    require_dir(&config.assets_dir, "Forge assets directory")?;
+    #[cfg(feature = "java-forge")]
+    require_file(&config.harness_jar, "Forge harness jar")?;
     Ok(())
 }
 
@@ -650,28 +616,22 @@ pub fn init_engine() -> Result<(), String> {
     )
 }
 
-#[cfg(feature = "java-forge")]
-fn engine_handle() -> Result<JavaEngineHandle, String> {
-    JAVA_ENGINE
-        .get()
-        .map(JavaEnginePool::handle)
-        .ok_or_else(|| "java engine is not initialized".to_string())
+#[cfg(forge_backend)]
+mod journal_engine;
+#[cfg(forge_backend)]
+use journal_engine::JournalEngine as ForgeEngine;
+
+#[cfg(forge_backend)]
+fn obtain_engine() -> Result<ForgeEngine, String> {
+    ForgeEngine::spawn()
 }
 
-#[cfg(feature = "java-forge")]
-type ForgeEngine = JavaEngineHandle;
-
-#[cfg(feature = "java-forge")]
-fn obtain_engine() -> Result<ForgeEngine, String> {
-    engine_handle()
-}
-
-#[cfg(all(feature = "graal-forge", not(feature = "java-forge")))]
-type ForgeEngine = GraalEngineHandle;
-
-#[cfg(all(feature = "graal-forge", not(feature = "java-forge")))]
-fn obtain_engine() -> Result<ForgeEngine, String> {
-    GraalEngineHandle::create(&JavaRuntimeConfig::from_env().assets_dir)
+pub fn run_engine_worker() -> bool {
+    #[cfg(feature = "graal-forge")]
+    if std::env::args().nth(1).as_deref() == Some("--forge-engine-worker") {
+        journal_engine::run_native_worker();
+    }
+    false
 }
 
 #[cfg(feature = "graal-forge")]
@@ -684,6 +644,11 @@ mod graal_ffi {
     pub type graal_isolatethread_t = std::ffi::c_void;
 
     extern "C" {
+        pub fn graal_get_isolate(thread: *mut graal_isolatethread_t) -> *mut graal_isolate_t;
+        pub fn forge_command(
+            thread: *mut graal_isolatethread_t,
+            request: *const c_char,
+        ) -> *mut c_char;
         pub fn graal_create_isolate(
             params: *mut std::ffi::c_void,
             isolate: *mut *mut graal_isolate_t,
@@ -1592,7 +1557,13 @@ fn run_hosted_engine_game_inner(
         players,
     );
     request.checkpoint_metrics = true;
-    let session_id = engine.start_game(&request.to_json().map_err(|err| err.to_string())?)?;
+    let mut request: Value = serde_json::to_value(request).map_err(|err| err.to_string())?;
+    if ai_player_indices.is_empty() {
+        request["decisionJournal"] = json!(true);
+        request["journalRewind"] = json!(true);
+        request["snapshotRecording"] = json!(false);
+    }
+    let session_id = engine.start_game(&request.to_string())?;
     info!(game_id, session_id, "hosted java-forge session started");
 
     struct SessionGuard {
@@ -1625,6 +1596,7 @@ fn run_hosted_engine_game_inner(
     // hot for a moment after either, which is when the next is due.
     let mut last_activity = Instant::now();
     let mut state_revision = 0;
+    let mut prompt_offset = 0_u32;
 
     loop {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1639,8 +1611,14 @@ fn run_hosted_engine_game_inner(
                 match rx.try_recv() {
                     Ok(ClientToServerMessage::Response {
                         action: PromptOutput::DiceRolled(DiceRolledOutput::DiceRolledAcknowledged),
-                        ..
+                        prompt_id,
                     }) => {
+                        if prompt_id != 0
+                            && last_prompt.as_ref().map(|prompt| prompt.prompt_id)
+                                != Some(prompt_id)
+                        {
+                            continue;
+                        }
                         if pending_roll_acks > 0 {
                             pending_roll_acks -= 1;
                             if pending_roll_acks == 0 {
@@ -1762,9 +1740,27 @@ fn run_hosted_engine_game_inner(
             send_observer_state(&engine, &session_id, &remote_prompt_tx);
         }
 
+        if let Some(target_prompt) = engine.rewind_if_requested(&session_id, &cancel)? {
+            let next_prompt = last_prompt
+                .as_ref()
+                .map_or(Some(1), |prompt| prompt.prompt_id.checked_add(1))
+                .ok_or("prompt id overflow")?;
+            prompt_offset = next_prompt.saturating_sub(target_prompt);
+            last_prompt = None;
+            pending_roll_acks = 0;
+            decision_received = None;
+            decision_submitted = None;
+            state_revision = u64::MAX;
+            continue;
+        }
+
         if let Some(prompt_json) = engine.get_prompt(&session_id, 0)? {
-            let prompt: AgentPrompt = serde_json::from_str(&prompt_json)
+            let mut prompt: AgentPrompt = serde_json::from_str(&prompt_json)
                 .map_err(|err| format!("failed to parse java prompt: {err}"))?;
+            prompt.prompt_id = prompt
+                .prompt_id
+                .checked_add(prompt_offset)
+                .ok_or("prompt id overflow")?;
             if last_prompt.as_ref().map(|p| p.prompt_id) != Some(prompt.prompt_id) {
                 last_activity = Instant::now();
                 let decision_elapsed = decision_received.take().map(|started| started.elapsed());
@@ -1797,7 +1793,6 @@ fn run_hosted_engine_game_inner(
                             "slow engine decision"
                         );
                     }
-                    report_engine_gc(&engine);
                 }
                 last_prompt = Some(prompt.clone());
                 let player = player_index(&prompt.deciding_player_id);
@@ -2729,7 +2724,7 @@ impl JavaBridge for UnavailableJavaBridge {
     }
 }
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 #[derive(serde::Deserialize)]
 struct SubprocessReply {
     ok: bool,
@@ -2739,12 +2734,12 @@ struct SubprocessReply {
     error: Option<String>,
 }
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 pub struct SubprocessBridge {
     child: Child,
     stdin: BufWriter<ChildStdin>,
@@ -2753,8 +2748,9 @@ pub struct SubprocessBridge {
     stderr_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 impl SubprocessBridge {
+    #[cfg(feature = "java-forge")]
     fn spawn(config: &JavaRuntimeConfig) -> Result<Self, String> {
         config.validate()?;
 
@@ -2774,13 +2770,17 @@ impl SubprocessBridge {
         cmd.arg("--forge-home")
             .arg(format!("{}/", config.assets_dir.display()));
 
-        let mut child = cmd
+        let child = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|err| format!("failed to spawn java subprocess: {err}"))?;
 
+        Self::from_child(child)
+    }
+
+    fn from_child(mut child: Child) -> Result<Self, String> {
         let stdin = child
             .stdin
             .take()
@@ -2803,10 +2803,20 @@ impl SubprocessBridge {
             }
         });
 
+        #[cfg(feature = "graal-forge")]
+        let process_id = child.id();
         let stderr_handle = std::thread::spawn(move || {
             if let Some(stderr) = stderr {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
+                    #[cfg(feature = "graal-forge")]
+                    if let Some(stats) = line.strip_prefix("forge:gc ") {
+                        if let Ok(stats) = serde_json::from_str(stats) {
+                            journal_engine::report_process_gc(process_id, Some(stats));
+                        }
+                        continue;
+                    }
+                    #[cfg(feature = "java-forge")]
                     if let Some(pause) = parse_gc_pause(&line) {
                         crate::metrics::record_jvm_gc(
                             pause.kind,
@@ -2929,10 +2939,12 @@ impl SubprocessBridge {
         if let Some(handle) = self.stderr_handle.take() {
             let _ = handle.join();
         }
+        #[cfg(feature = "graal-forge")]
+        journal_engine::report_process_gc(self.child.id(), None);
     }
 }
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 impl JavaBridge for SubprocessBridge {
     fn initialize(&mut self, _assets_dir: &str) -> Result<(), String> {
         Ok(())
@@ -3001,7 +3013,7 @@ impl JavaBridge for SubprocessBridge {
     }
 }
 
-#[cfg(feature = "java-forge")]
+#[cfg(forge_backend)]
 impl Drop for SubprocessBridge {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -3012,6 +3024,8 @@ impl Drop for SubprocessBridge {
         if let Some(handle) = self.stderr_handle.take() {
             let _ = handle.join();
         }
+        #[cfg(feature = "graal-forge")]
+        journal_engine::report_process_gc(self.child.id(), None);
     }
 }
 

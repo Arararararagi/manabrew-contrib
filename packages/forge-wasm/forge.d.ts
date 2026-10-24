@@ -71,6 +71,7 @@ export interface ForgeStartGameOptions {
   /** Off, the engine takes no restore snapshots. Defaults to on. */
   snapshotRecording?: boolean;
   decisionJournal?: boolean;
+  journalRewind?: boolean;
   /** Pins the engine's game id, which a decision journal records. */
   gameId?: string;
 }
@@ -94,6 +95,7 @@ export interface ForgeStartMultiplayerGameOptions {
   /** Off, the engine takes no restore snapshots. Defaults to on. */
   snapshotRecording?: boolean;
   decisionJournal?: boolean;
+  journalRewind?: boolean;
   /** Pins the engine's game id, which a decision journal records. */
   gameId?: string;
 }

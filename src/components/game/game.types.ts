@@ -1,4 +1,4 @@
-import type { CardDto, CheckpointDto } from "@/protocol/game";
+import type { CardDto, CheckpointDto, DecisionHistoryDto } from "@/protocol/game";
 import type { DeckCard } from "@/protocol/deck";
 import type { GameLogEntry } from "@/types/gameLog";
 import type { PromptType } from "@/protocol";
@@ -53,6 +53,7 @@ export interface RightActionPanelProps {
   resolveCardName: (cardId: string) => string;
   resolvePlayerName: (playerId: string) => string;
   checkpoints: CheckpointDto[];
+  decisionHistory?: DecisionHistoryDto;
   canRequestRestore: boolean;
   onRequestRestore: (checkpoint: CheckpointDto) => void;
   snapshotRecording: boolean;

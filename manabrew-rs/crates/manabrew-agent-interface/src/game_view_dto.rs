@@ -1121,6 +1121,7 @@ impl GameViewDtoExt for GameViewDto {
             checkpoints: Vec::new(),
             restore_vote: None,
             snapshot_recording: false,
+            decision_history: None,
         }
     }
 

@@ -164,6 +164,9 @@ public final class ManaBrewEngineAdapter {
         if (request.journalStart != null) {
             session.enableDecisionJournal(request.journalStart, request.journalCommitBarrier);
         }
+        if (request.journalRewind) {
+            session.enableDecisionHistory(request.journalStart, request.replaySnapshot);
+        }
         sessions.put(session.getSessionId(), session);
         LIVE_SESSIONS.add(session);
         session.start(rng);
@@ -228,6 +231,25 @@ public final class ManaBrewEngineAdapter {
     public String getEngineError(final String sessionId) {
         final String error = getSession(sessionId).getEngineError();
         return error == null ? "" : error;
+    }
+
+    public boolean isReplaying(final String sessionId) {
+        return getSession(sessionId).isReplaying();
+    }
+
+    public String getRewindRequest(final String sessionId) {
+        return getSession(sessionId).getRewindRequest();
+    }
+
+    public String resumeAfterFailedRewind(final String sessionId) {
+        getSession(sessionId).resumeAfterFailedRewind();
+        return "";
+    }
+
+    public String replayReady(final String sessionId) {
+        final ManaBrewInteractiveSession session = getSession(sessionId);
+        if (session.getEngineError() != null) throw new IllegalStateException(session.getEngineError());
+        return Boolean.toString(!session.isReplaying() && session.getLatestPromptJson() != null);
     }
 
     public String endGameJson(final String sessionId) {
@@ -528,6 +550,10 @@ public final class ManaBrewEngineAdapter {
                 gameId, variant, startingLife, seed, snapshotRecording, players);
         request.startingLifeSpecified = root.has("startingLife");
         request.checkpointMetrics = root.has("checkpointMetrics") && root.get("checkpointMetrics").getAsBoolean();
+        request.journalRewind = root.has("journalRewind") && root.get("journalRewind").getAsBoolean();
+        if (root.has("replaySnapshot")) {
+            request.replaySnapshot = root.remove("replaySnapshot").getAsJsonObject();
+        }
         if (root.has("checkpoint") || (root.has("checkpointExport") && root.get("checkpointExport").getAsBoolean())) {
             throw new IllegalArgumentException("GameState checkpoints are unsupported; restore a replay snapshot instead");
         }
@@ -538,6 +564,12 @@ public final class ManaBrewEngineAdapter {
                 && root.get("decisionJournalCommitBarrier").getAsBoolean();
         if (request.journalCommitBarrier && request.journalStart == null) {
             throw new IllegalArgumentException("journal commit barrier requires decisionJournal");
+        }
+        if (request.journalRewind && request.journalStart == null) {
+            throw new IllegalArgumentException("journal rewind requires decisionJournal");
+        }
+        if (request.replaySnapshot != null && !request.journalRewind) {
+            throw new IllegalArgumentException("browser replay requires journalRewind");
         }
         return request;
     }
@@ -576,6 +608,8 @@ public final class ManaBrewEngineAdapter {
     }
 
     public static final class StartGameRequest {
+        private boolean journalRewind;
+        private JsonObject replaySnapshot;
         private final String gameId;
         private final String variant;
         private final int startingLife;

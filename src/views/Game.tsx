@@ -2645,7 +2645,13 @@ export default function Game({ exitTo }: GameProps = {}) {
         resolveCardName={(cardId) => cardNameById.get(cardId) ?? cardId}
         resolvePlayerName={(playerId) => playerNameById.get(playerId) ?? playerId}
         checkpoints={gameView.checkpoints}
-        canRequestRestore={!iAmEliminated && !gameView.gameOver}
+        decisionHistory={gameView.decisionHistory}
+        canRequestRestore={
+          !iAmEliminated &&
+          !gameView.gameOver &&
+          !gameView.decisionHistory?.rewinding &&
+          !gameView.decisionHistory?.unavailableReason
+        }
         onRequestRestore={setRestoreTarget}
         snapshotRecording={gameView.snapshotRecording}
         hostsEngine={isForgeWasmActive() && (!isMultiplayer || isHost)}

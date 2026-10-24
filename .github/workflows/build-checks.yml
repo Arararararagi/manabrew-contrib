@@ -59,6 +59,8 @@ jobs:
               'manabrew-rs/crates/self-hosted-node/',
               'scripts/harness.mjs',
               'scripts/engine-bench/forge-replay.mjs',
+              'scripts/engine-bench/forge-rewind.mjs',
+              'scripts/engine-bench/forge-rewind-wasm.mjs',
               'scripts/engine-bench/forge-decision-journal.mjs',
               'scripts/engine-bench/journal-fixture.mjs',
               'scripts/engine-bench/journal-harness.mjs',
@@ -776,6 +778,9 @@ jobs:
       - name: Verify replay snapshot restoration in fresh processes
         run: yarn test:forge-replay
 
+      - name: Verify journal rewind and failed replay recovery
+        run: yarn test:forge-rewind
+
   forge-room-graalvm-windows:
     name: GraalVM build (Windows)
     runs-on: windows-latest
@@ -859,6 +864,9 @@ jobs:
           SELF_HOSTED_NODE_GRAAL_SMOKE: "1"
           RUST_LOG: self_hosted_node=info
         run: cargo run -p self-hosted-node --features graal-forge
+
+      - name: Verify native journal rewind
+        run: yarn test:forge-rewind --native target/debug/self-hosted-node.exe
 
       - name: Stub frontend dist for tauri context macro
         shell: bash
@@ -950,6 +958,9 @@ jobs:
           RUST_LOG: self_hosted_node=info
         run: cargo run --release -p self-hosted-node --features graal-forge
 
+      - name: Verify native journal rewind
+        run: yarn test:forge-rewind --native target/release/self-hosted-node
+
   forge-room-graalvm-macos:
     name: GraalVM build (macOS)
     runs-on: macos-latest
@@ -1029,6 +1040,9 @@ jobs:
           SELF_HOSTED_NODE_GRAAL_SMOKE: "1"
           RUST_LOG: self_hosted_node=info
         run: cargo run -p self-hosted-node --features graal-forge
+
+      - name: Verify native journal rewind
+        run: yarn test:forge-rewind --native target/debug/self-hosted-node
 
       # `cargo build` of the tauri crate runs `generate_context!`, which embeds
       # `frontendDist` (../dist). Stub it so the link test doesn't drag in the
@@ -1134,28 +1148,18 @@ jobs:
             exit 1
           fi
 
-      - name: Start it and wait for the engine
-        run: |
-          docker run -d --name node-smoke --memory 2g \
-            -e SELF_HOSTED_NODE_RELAY_URL=ws://127.0.0.1:9 \
-            -e RUST_LOG=self_hosted_node=info \
-            manabrew-node:pr
-          for _ in $(seq 1 60); do
-            if docker logs node-smoke 2>&1 | grep -q "shared graal isolate initialized"; then
-              echo "engine up"
-              exit 0
-            fi
-            if ! docker ps -q --filter name=node-smoke | grep -q .; then
-              echo "container exited early:"
-              docker logs node-smoke 2>&1 | tail -40
-              exit 1
-            fi
-            sleep 2
-          done
-          echo "engine did not come up within 120s:"
-          docker logs node-smoke 2>&1 | tail -40
-          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
-      - name: Container logs on failure
-        if: failure()
-        run: docker logs node-smoke 2>&1 | tail -100 || true
+      - name: Verify journal rewind in isolated image workers
+        run: |
+          mkdir -p tmp
+          trap 'docker ps -aq --filter label=manabrew-rewind-regression | xargs -r docker rm -f' EXIT
+          cat > tmp/forge-image-worker <<'EOF'
+          #!/bin/sh
+          exec docker run --rm -i --memory 2g --label manabrew-rewind-regression manabrew-node:pr "$@"
+          EOF
+          chmod +x tmp/forge-image-worker
+          node scripts/engine-bench/forge-rewind.mjs \
+            --native tmp/forge-image-worker --forge-home /build/forge/forge-gui

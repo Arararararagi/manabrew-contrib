@@ -119,6 +119,9 @@ public final class WasmMain {
                 // line means the game is over and every seat is still waiting
                 // on an answer that will never come.
                 final String engineError = adapter.getEngineError(gameId);
+                if (adapter.isReplaying(gameId)) {
+                    throw new IllegalStateException(engineError.isEmpty() ? "Replay ended before its target decision" : engineError);
+                }
                 System.out.println(engineError.isEmpty()
                         ? "[wasm] game over, publishing the final board"
                         : "[wasm] engine crashed, publishing the final board");

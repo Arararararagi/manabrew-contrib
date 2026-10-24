@@ -619,6 +619,54 @@ impl Client {
         self.envelope_kinds.contains(kind)
     }
 
+    pub async fn rewind_and_continue(&mut self, checkpoint_id: u32) -> Result<(), String> {
+        let old_prompt: Value =
+            serde_json::from_str(self.last_prompt.as_deref().ok_or("no prompt")?)
+                .map_err(|error| error.to_string())?;
+        self.broadcast(&StateEnvelope::Directive {
+            from_player: self.slot.clone().ok_or("no seat")?,
+            directive: json!({"type": "requestRestore", "checkpointId": checkpoint_id}),
+        })
+        .await?;
+        tokio::time::timeout(Duration::from_secs(120), async {
+            let mut approved = false;
+            loop {
+                let message = recv(&mut self.write, &mut self.read)
+                    .await
+                    .ok_or("connection closed during rewind")?;
+                if let ServerMessage::StateUpdate { ref state, .. } = message {
+                    if state["kind"] == "fatal" {
+                        return Err(state["message"].to_string());
+                    }
+                    let view = &state["state"]["gameView"];
+                    if view["restoreVote"]["status"]["type"] == "unavailable" {
+                        return Err("journal rewind failed".to_string());
+                    }
+                    if !approved && view["restoreVote"]["status"]["type"] == "approved" {
+                        assert_eq!(
+                            view["checkpoints"].as_array().unwrap().len(),
+                            checkpoint_id as usize - 1
+                        );
+                        assert_eq!(view["snapshotRecording"], false);
+                        approved = true;
+                    }
+                }
+                if approved {
+                    if let Some(response) = self.prompt_response(message)? {
+                        let StateEnvelope::Response { prompt_id, .. } = &response else {
+                            unreachable!()
+                        };
+                        assert!(u64::from(*prompt_id) > old_prompt["promptId"].as_u64().unwrap());
+                        self.broadcast(&response).await?;
+                        return Ok(());
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| "rewind timed out".to_string())?
+    }
+
     fn prompt_response(&mut self, message: ServerMessage) -> Result<Option<StateEnvelope>, String> {
         let ServerMessage::StateUpdate { state, .. } = message else {
             return Ok(None);

@@ -28,7 +28,12 @@ final class GameCheckpoint {
         final JsonObject state = new JsonObject();
         final JsonArray views = new JsonArray();
         for (int seat = -1; seat < session.getGame().getRegisteredPlayers().size(); seat++) {
-            views.add(JsonParser.parseString(session.getSnapshotJson(seat)));
+            final JsonObject view = JsonParser.parseString(session.getSnapshotJson(seat)).getAsJsonObject();
+            view.remove("checkpoints");
+            view.remove("restoreVote");
+            view.remove("snapshotRecording");
+            view.remove("decisionHistory");
+            views.add(view);
         }
         state.add("views", views);
         final JsonArray zones = new JsonArray();
@@ -138,7 +143,7 @@ final class GameCheckpoint {
         }
     }
 
-    private static void validateHistory(final JsonObject history) {
+    static void validateHistory(final JsonObject history) {
         if (history.get("version").getAsInt() != 2 || history.has("unavailableReason")) {
             throw new IllegalArgumentException("unsupported or invalidated decision journal");
         }
@@ -156,7 +161,7 @@ final class GameCheckpoint {
         }
     }
 
-    private static void requireEqual(final JsonElement expected, final JsonElement actual,
+    static void requireEqual(final JsonElement expected, final JsonElement actual,
             final String kind, final long sequence) {
         if (expected == null || !expected.equals(actual)) {
             throw new IllegalStateException(kind + " divergence at decision " + sequence);

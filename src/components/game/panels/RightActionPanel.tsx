@@ -18,6 +18,7 @@ export function RightActionPanel({
   resolveCardName,
   resolvePlayerName,
   checkpoints,
+  decisionHistory,
   canRequestRestore,
   onRequestRestore,
   snapshotRecording,
@@ -115,7 +116,7 @@ export function RightActionPanel({
               className={cn(TAB_BUTTON_BASE, activeTab === "snapshots" ? TAB_ACTIVE : TAB_INACTIVE)}
               onClick={() => setActiveTab("snapshots")}
             >
-              Snapshots ({checkpoints.length})
+              {decisionHistory ? "Journal" : "Snapshots"} ({checkpoints.length})
             </button>
             {import.meta.env.DEV ? (
               <button
@@ -147,6 +148,7 @@ export function RightActionPanel({
         ) : activeTab === "snapshots" ? (
           <CheckpointsPanel
             checkpoints={checkpoints}
+            decisionHistory={decisionHistory}
             canRequestRestore={canRequestRestore}
             onRequestRestore={onRequestRestore}
             resolvePlayerName={resolvePlayerName}

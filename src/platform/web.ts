@@ -792,6 +792,8 @@ class WebGameApi implements IGameApi {
       opponentDecks: params.opponentDecks,
       engine: params.engine,
       forgeAi: params.aiController === "forge",
+      decisionJournal: params.engine === "Forge" && params.aiController !== "forge",
+      journalRewind: params.engine === "Forge" && params.aiController !== "forge",
       snapshotRecording: usePreferencesStore.getState().snapshotRecording,
     });
   }
@@ -824,6 +826,8 @@ class WebGameApi implements IGameApi {
         playerNames: params.playerNames,
         enginePlayerIndex: params.enginePlayerIndex,
         botSeats: (params.botPlayerSlots ?? []).map(seatIndexOf),
+        decisionJournal: params.engine === "Forge",
+        journalRewind: params.engine === "Forge",
         snapshotRecording: usePreferencesStore.getState().snapshotRecording,
         startingLife: params.startingLife,
         engine: params.engine,

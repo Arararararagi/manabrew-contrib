@@ -92,6 +92,10 @@ public final class SabTransport implements InteractiveBridge {
     static native int seatCount();
 
     @JS.Coerce
+    @JS("return globalThis.__forgePromptOffset || 0;")
+    static native int promptOffset();
+
+    @JS.Coerce
     @JS("const seats = globalThis.__forgeDirectiveLanes || [];"
         + "const host = globalThis.__forgeHostLane;"
         + "globalThis.__mbLanes = (host ? [...seats, host] : seats).map((lane) => ({"
@@ -209,7 +213,7 @@ public final class SabTransport implements InteractiveBridge {
         openPrompt = null;
         openSeat = -1;
 
-        final JsonObject message = JsonParser.parseString(recv(seat)).getAsJsonObject();
+        final JsonObject message = readResponse(seat, promptJson);
         if (bot) {
             botMsSinceRecv += System.currentTimeMillis() - botStartedAt;
         } else {
@@ -255,20 +259,20 @@ public final class SabTransport implements InteractiveBridge {
             turnAtLastPrompt = turnNow;
         }
         if (!dice) {
-            sendTagged(seat, "prompt", "prompt", promptJson);
+            sendTagged(seat, "prompt", "prompt", wirePrompt(promptJson));
         }
     }
 
     private String exchangeWithAllSeats(final String promptJson) {
         final int seats = Math.max(1, seatCount());
-        final JsonObject prompt = JsonParser.parseString(promptJson).getAsJsonObject();
+        final JsonObject prompt = JsonParser.parseString(wirePrompt(promptJson)).getAsJsonObject();
         for (int seat = 0; seat < seats; seat++) {
             prompt.addProperty("decidingPlayerId", "player-" + seat);
             sendTagged(seat, "prompt", "prompt", prompt.toString());
         }
         String result = null;
         for (int seat = 0; seat < seats; seat++) {
-            final JsonObject message = JsonParser.parseString(recv(seat)).getAsJsonObject();
+            final JsonObject message = readResponse(seat, promptJson);
             if (result == null || message.has("directive")) {
                 result = decodeMessage(seat, message);
             }
@@ -291,6 +295,24 @@ public final class SabTransport implements InteractiveBridge {
             return canonical.toString();
         }
         return message.toString();
+    }
+
+    private static String wirePrompt(final String json) {
+        final JsonObject prompt = JsonParser.parseString(json).getAsJsonObject();
+        prompt.addProperty("promptId", prompt.get("promptId").getAsLong() + promptOffset());
+        return prompt.toString();
+    }
+
+    private static JsonObject readResponse(final int seat, final String promptJson) {
+        final JsonObject prompt = JsonParser.parseString(wirePrompt(promptJson)).getAsJsonObject();
+        prompt.addProperty("decidingPlayerId", "player-" + seat);
+        while (true) {
+            final JsonObject message = JsonParser.parseString(recv(seat)).getAsJsonObject();
+            if (!message.has("promptId") || message.get("promptId").getAsLong() == 0
+                    || message.get("promptId").equals(prompt.get("promptId"))) return message;
+            sendTagged(seat, "error", "error", "{\"code\":\"stalePrompt\",\"message\":\"That decision is no longer open.\"}");
+            sendTagged(seat, "prompt", "prompt", prompt.toString());
+        }
     }
 
     /**
@@ -345,6 +367,27 @@ public final class SabTransport implements InteractiveBridge {
             }
         }
     }
+
+    @Override
+    public void requestRewind(final String snapshot) {
+        waitForRewind(snapshot);
+    }
+
+    @JS(args = {"snapshot"}, value = "const control = new Int32Array(globalThis.__forgeRewindControl);"
+        + "Atomics.store(control, 0, 0);"
+        + "postMessage({ type: 'event', event: 'forge:rewind', payload: JSON.parse(snapshot) });"
+        + "while (Atomics.load(control, 0) === 0) Atomics.wait(control, 0, 0);")
+    private static native void waitForRewind(String snapshot);
+
+    @Override
+    public void replayReady() {
+        awaitReplayActivation();
+    }
+
+    @JS("const control = new Int32Array(globalThis.__forgeRewindControl);"
+        + "postMessage({ type: 'event', event: 'forge:replay_ready', payload: {} });"
+        + "while (Atomics.load(control, 0) !== 2) Atomics.wait(control, 0, 0);")
+    private static native void awaitReplayActivation();
 
     // The client reads state.gameView, matching GameSnapshotEventDto on
     // the Rust side; a bare game view leaves the board unmounted.

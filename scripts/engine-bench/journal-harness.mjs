@@ -4,19 +4,21 @@ import { createInterface } from "node:readline";
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-export function harness({ java = "java", jar, forgeHome, sessionId, javaOptions = [] }) {
+export function harness({ java = "java", jar, forgeHome, sessionId, javaOptions = [], native }) {
   const child = spawn(
-    java,
-    [
-      "-Xmx1g",
-      ...javaOptions,
-      "-cp",
-      jar,
-      "forge.harness.Main",
-      "--interactive-server",
-      "--forge-home",
-      forgeHome,
-    ],
+    native || java,
+    native
+      ? ["--forge-engine-worker", forgeHome]
+      : [
+          "-Xmx1g",
+          ...javaOptions,
+          "-cp",
+          jar,
+          "forge.harness.Main",
+          "--interactive-server",
+          "--forge-home",
+          forgeHome,
+        ],
     { stdio: ["pipe", "pipe", "pipe"] },
   );
   let pending,
@@ -82,7 +84,14 @@ export function harness({ java = "java", jar, forgeHome, sessionId, javaOptions 
     },
     close() {
       if (pending) clearTimeout(pending.timer);
-      child.kill("SIGKILL");
+      if (native) {
+        child.stdin.end();
+        const timer = setTimeout(() => child.kill("SIGKILL"), 2000);
+        timer.unref();
+        child.once("exit", () => clearTimeout(timer));
+      } else {
+        child.kill("SIGKILL");
+      }
       lines.close();
     },
   };

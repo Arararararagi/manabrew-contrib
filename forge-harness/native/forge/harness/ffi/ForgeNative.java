@@ -41,6 +41,15 @@ public final class ForgeNative {
         }
     }
 
+    @CEntryPoint(name = "forge_command")
+    static CCharPointer command(IsolateThread thread, CCharPointer requestJson) {
+        try {
+            return ok(forge.harness.host.EngineCommands.execute(ADAPTER, str(requestJson)));
+        } catch (Throwable t) {
+            return err(t);
+        }
+    }
+
     @CEntryPoint(name = "forge_submit_action")
     static CCharPointer submitAction(IsolateThread thread, CCharPointer sessionId, CCharPointer actionJson) {
         try {

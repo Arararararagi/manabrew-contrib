@@ -19,7 +19,7 @@ Dependency rule (do not violate): `parity → common`, `host → common`, `Main 
 
 ### Replay snapshots
 
-`GameCheckpoint` exports a collected journal prefix plus verification at a pending decision and restores it by full execution replay. It never applies Forge `GameState`. See `docs/DECISION_REPLAY.md` for the API and limits. The existing UI `GameSnapshot` rollback is a separate path and invalidates decision replay.
+`GameCheckpoint` exports a collected journal prefix plus verification at a pending decision and restores it by full execution replay. It never applies Forge `GameState`. See `docs/DECISION_REPLAY.md` for the API and limits. `DecisionHistory` retains the private complete input prefix for interactive `journalRewind`, publishes redacted decision categories in `checkpoints`, and verifies replay in a fresh worker/process. `EngineCommands` shares threaded JVM/native command dispatch. Rewind directives are orchestration and never journal inputs. The legacy `GameSnapshot` path remains only when journal rewind is disabled and invalidates delivery journals.
 
 ### Host payability probes must stay silent
 
