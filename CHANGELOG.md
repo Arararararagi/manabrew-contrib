@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.64.8](https://github.com/witchesofthehill/manabrew/compare/v3.64.7...v3.64.8) (2026-10-24)
+
+### Fixes
+
+* crash engine ([#1119](https://github.com/witchesofthehill/manabrew/issues/1119)) ([a728ce8](https://github.com/witchesofthehill/manabrew/commit/a728ce88c21546af1e070fa7066f0f65dd367a7d))
+
 ## [3.64.7](https://github.com/witchesofthehill/manabrew/compare/v3.64.6...v3.64.7) (2026-10-24)
 
 ### Fixes
