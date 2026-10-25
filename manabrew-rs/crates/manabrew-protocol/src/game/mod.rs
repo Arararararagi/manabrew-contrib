@@ -207,6 +207,8 @@ pub struct CheckpointDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub deciding_player_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub log: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

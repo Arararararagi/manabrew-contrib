@@ -163,7 +163,6 @@ export function applyState(
     (previousVote?.voteId !== vote.voteId || previousVote?.status.type !== "approved")
   ) {
     set({
-      gameLog: [],
       currentPrompt: null,
       isWaitingForResponse: false,
       relinquishedPriority: false,

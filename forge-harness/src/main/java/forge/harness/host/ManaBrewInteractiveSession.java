@@ -12,6 +12,9 @@ import com.google.gson.JsonParser;
 import forge.harness.protocol.*;
 import forge.card.CardStateName;
 import forge.game.Game;
+import forge.game.GameLogEntry;
+import forge.game.GameLogEntryType;
+import forge.game.GameLogVerbosity;
 import forge.game.GameSnapshot;
 import forge.game.ability.ApiType;
 import forge.game.GameEntity;
@@ -94,6 +97,7 @@ public final class ManaBrewInteractiveSession {
     private static final int CHECKPOINT_TURNS = 3;
     private final Deque<Checkpoint> checkpoints = new ArrayDeque<>();
     private volatile List<Map<String, Object>> checkpointViews = List.of();
+    private int gameLogSeen;
     private int nextCheckpointId = 1;
     private int checkpointTurn = -1;
     private PhaseType checkpointPhase;
@@ -126,6 +130,7 @@ public final class ManaBrewInteractiveSession {
         private final SessionSnapshot snapshot;
         private String decision;
         private int decidingPlayer;
+        private final List<String> log = new ArrayList<>();
 
         private Checkpoint(
                 final int id,
@@ -2206,6 +2211,7 @@ public final class ManaBrewInteractiveSession {
                                     handler.getPhase(), handler.getPlayerTurn(), handler.getPriorityPlayer(), null);
                             checkpoint.decision = DecisionHistory.description(queued.canonical());
                             checkpoint.decidingPlayer = promptedPlayerIndex;
+                            absorbGameLog();
                             checkpoints.addLast(checkpoint);
                             while (checkpoints.size() > 200) checkpoints.removeFirst();
                             if (!replaying) publishCheckpointViews();
@@ -2342,6 +2348,7 @@ public final class ManaBrewInteractiveSession {
         final long started = checkpointMetricsEnabled ? System.nanoTime() : 0;
         final SessionSnapshot snapshot = captureSnapshot();
         final long copied = checkpointMetricsEnabled ? System.nanoTime() : 0;
+        absorbGameLog();
         checkpoints.addLast(new Checkpoint(
                 nextCheckpointId++, handler.getTurn(), handler.getPhase(), handler.getPlayerTurn(),
                 handler.getPriorityPlayer(), snapshot));
@@ -2357,7 +2364,22 @@ public final class ManaBrewInteractiveSession {
         }
     }
 
+    private void absorbGameLog() {
+        final List<GameLogEntry> entries = game.getGameLog().getAllEntries();
+        final Checkpoint latest = checkpoints.peekLast();
+        if (latest != null) {
+            for (final GameLogEntry entry : entries.subList(gameLogSeen, entries.size())) {
+                if (entry.type() != GameLogEntryType.TURN
+                        && GameLogVerbosity.MEDIUM.getIncludedTypes().contains(entry.type())) {
+                    latest.log.add(entry.message());
+                }
+            }
+        }
+        gameLogSeen = entries.size();
+    }
+
     private void publishCheckpointViews() {
+        absorbGameLog();
         final List<Map<String, Object>> views = new ArrayList<>();
         for (final Checkpoint checkpoint : checkpoints) {
             views.add(checkpointView(checkpoint));
@@ -2371,6 +2393,9 @@ public final class ManaBrewInteractiveSession {
         if (checkpoint.decision != null) {
             view.put("decision", checkpoint.decision);
             view.put("decidingPlayerId", "player-" + checkpoint.decidingPlayer);
+        }
+        if (!checkpoint.log.isEmpty()) {
+            view.put("log", List.copyOf(checkpoint.log));
         }
         return view;
     }
@@ -2442,6 +2467,8 @@ public final class ManaBrewInteractiveSession {
         while (checkpoints.peekLast() != target) {
             checkpoints.removeLast();
         }
+        target.log.clear();
+        gameLogSeen = game.getGameLog().getAllEntries().size();
         publishCheckpointViews();
         for (final Player player : game.getPlayers()) {
             if (player.getController() instanceof ManaBrewInteractiveController) {

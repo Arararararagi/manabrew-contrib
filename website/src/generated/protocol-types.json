@@ -358,8 +358,8 @@
       "refs": []
     },
     "CheckpointDto": {
-      "ts": "interface CheckpointDto {\n  checkpointId: number;\n  turn: number;\n  step: StepKind;\n  activePlayerId: string;\n  decision?: string;\n  decidingPlayerId?: string;\n}",
-      "rust": "#[serde(rename_all = \"camelCase\")]\npub struct CheckpointDto {\n    pub checkpoint_id: u32,\n    pub turn: u32,\n    pub step: StepKind,\n    pub active_player_id: String,\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub decision: Option<String>,\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub deciding_player_id: Option<String>,\n}",
+      "ts": "interface CheckpointDto {\n  checkpointId: number;\n  turn: number;\n  step: StepKind;\n  activePlayerId: string;\n  decision?: string;\n  decidingPlayerId?: string;\n  log: Array<string>;\n}",
+      "rust": "#[serde(rename_all = \"camelCase\")]\npub struct CheckpointDto {\n    pub checkpoint_id: u32,\n    pub turn: u32,\n    pub step: StepKind,\n    pub active_player_id: String,\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub decision: Option<String>,\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub deciding_player_id: Option<String>,\n    #[serde(default, skip_serializing_if = \"Vec::is_empty\")]\n    pub log: Vec<String>,\n}",
       "refs": ["StepKind"]
     },
     "ChooseActionInput": {

@@ -69,7 +69,8 @@ public final class JournalRewindTest {
                     + ") to decision " + target.sequence() + " (turn " + target.turn() + "), then matched "
                     + original.size() + " prompts and " + original.size() * VIEWERS.length + " views; +1/+1 counters "
                     + p1p1Counters(end.views()[0]) + " -> " + p1p1Counters(target.views()[0]) + ", dungeons "
-                    + dungeons(end.views()[0]) + " -> " + dungeons(target.views()[0]));
+                    + dungeons(end.views()[0]) + " -> " + dungeons(target.views()[0]) + "; "
+                    + logLines(end.views()[0]).size() + " checkpoint log lines, e.g. " + logLines(end.views()[0]).subList(0, 6));
         }
     }
 
@@ -145,6 +146,7 @@ public final class JournalRewindTest {
         require(!dungeons(end.views()[0]).equals(dungeons(target.views()[0])),
                 "fixture makes no dungeon progress after turn " + TARGET_TURN);
         require(!dungeons(target.views()[0]).isEmpty(), "fixture has no dungeon in progress at turn " + TARGET_TURN);
+        require(!logLines(end.views()[0]).isEmpty(), "checkpoints carry no game log lines");
     }
 
     private static JsonObject requestRewind(final Engine source, final Boundary target) throws Exception {
@@ -411,6 +413,17 @@ public final class JournalRewindTest {
             }
         }
         return total;
+    }
+
+    private static List<String> logLines(final JsonObject view) {
+        final List<String> lines = new ArrayList<>();
+        for (final JsonElement checkpoint : view.getAsJsonArray("checkpoints")) {
+            final JsonArray log = checkpoint.getAsJsonObject().getAsJsonArray("log");
+            if (log != null) {
+                log.forEach(line -> lines.add(line.getAsString()));
+            }
+        }
+        return lines;
     }
 
     private static Set<String> dungeons(final JsonObject view) {
