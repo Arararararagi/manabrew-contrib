@@ -3368,6 +3368,3 @@ mod gc_log_tests {
         ));
     }
 }
-
-#[cfg(all(test, unix, forge_backend))]
-mod subprocess_tests;

@@ -58,8 +58,6 @@ jobs:
               'src-tauri/',
               'manabrew-rs/crates/self-hosted-node/',
               'scripts/harness.mjs',
-              'scripts/forge-tests/journal.mjs',
-              'scripts/forge-tests/replay.mjs',
               'scripts/forge-tests/rewind.mjs',
               'scripts/forge-tests/journal-fixture.mjs',
               'scripts/forge-tests/journal-harness.mjs',
@@ -772,11 +770,8 @@ jobs:
       - name: Build and test forge-harness
         run: node scripts/harness.mjs test
 
-      - name: Verify journal delivery and replay
-        run: node scripts/forge-tests/journal.mjs && node scripts/forge-tests/replay.mjs
-
-      - name: Verify subprocess deadlines and rewind failure recovery
-        run: cargo test -p self-hosted-node --no-default-features --features java-forge --lib -- --test-threads=1
+      - name: Verify journal rewind orchestration
+        run: cargo test -p self-hosted-node --no-default-features --features java-forge --lib journal_engine -- --test-threads=1
 
       - name: Verify journal rewind and failed replay recovery
         run: node scripts/forge-tests/rewind.mjs

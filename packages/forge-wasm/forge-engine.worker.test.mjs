@@ -7,10 +7,10 @@ import {
   writeDirectiveLane,
   createSeat,
   writeSeatMessage,
-} from "../../packages/forge-wasm/seat.js";
+} from "./seat.js";
 
 const source = readFileSync(
-  new URL("../../packages/forge-wasm/forge-engine.worker.js", import.meta.url),
+  new URL("./forge-engine.worker.js", import.meta.url),
   "utf8",
 );
 function fixture(started = true) {

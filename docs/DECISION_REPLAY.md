@@ -68,19 +68,20 @@ queued on the game thread, so acknowledge pending commit barriers first. Snapsho
 pin the harness artifact, assets and effective preferences; these must remain
 immutable during a session. Durable storage and host takeover are separate work.
 
-## Regression checks
+## Regression check
 
-Use Node 24 and JDK 18–21. Build the relevant harness/native/WebImage artifacts first.
-Tests live in `scripts/forge-tests/`:
+`JournalRewindTest` (run by `yarn build:harness`) plays a seeded two-seat game with
+dungeon venture and +1/+1 counters through turn 12 in one harness process,
+rewinds to the first decision of turn 10, and reconstructs it in a second process.
+Every later prompt and every seat's and the spectator's view must match the original
+through the end of turn 12. A fixture that no longer adds counters or dungeon progress
+after the target fails rather than passing with weaker coverage.
+`ReplayOrderingTest` keeps Room choice order independent of JVM identity hashes.
 
-- `yarn test:forge-journal`: delivery, acknowledgements, barriers and invalidation.
-- `yarn test:forge-replay`: fresh-JVM reconstruction, hidden choices, multiplayer,
-  stack responses, RNG, corrupted snapshots and continued play.
-- `yarn test:forge-rewind [--native <node binary>]`: votes, rewind and failure recovery.
-- `yarn test:forge-supervisor`: command/SAB handling, promotion and teardown.
-- `yarn test:forge-rewind-wasm`: real WebImage replacements and continued play.
+`yarn test:forge-rewind [--native <node binary>]` (`scripts/forge-tests/rewind.mjs`)
+rewinds the JVM, native or container engine, checks continued play, and checks that a
+failed or corrupted rewind resumes the original game unchanged and that a pending
+concede cancels promotion.
 
-`yarn build:harness` runs seat/limit, ordering and snapshot-concurrency regressions.
-Rust `journal_engine::tests` and `subprocess_tests` cover hangs, exits, cancellation
-and child cleanup. The networking rewind case requires
-`REGRESSION_NODE_ENGINE_BACKEND=forge` to exercise Forge rather than the default Rust engine.
+`journal_engine` unit tests cover node promotion, hung or crashed candidates and process
+cleanup. `yarn test:forge-supervisor` covers browser worker promotion and teardown.

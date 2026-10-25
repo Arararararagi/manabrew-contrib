@@ -34,7 +34,7 @@ After changing approved brand exports, run `python3 scripts/generate-brand-logo.
 
 The **runtime** client-half prompt check is a vitest test (`src/stores/gameStore.constants.test.ts`, `yarn test`), not a script: it runs the rust `manabrew-agent-interface --bin emit_prompt_fixtures` bin on demand for one example of every `AgentPromptInner` variant, then replays them through the UI's `applyPrompt`, asserting every type is known/handled and ingests without throwing. No committed fixture — can't drift from the engine types.
 
-The **Java harness-half** is primarily checked at compile time: `gen-harness-prompts.mjs` generates typed Java prompt classes from the protocol, and the harness builds every prompt from them — so a protocol change the harness no longer matches fails `yarn build:harness`. After Maven succeeds, `harness.mjs` also runs the regression executables compiled under `forge-harness/src/test/java` (plain `main` methods, run from the repo root; `ActionSpaceTest`, `HarnessPlayPlumbingTest` and `ManaBrewInteractiveControllerTest` boot the card database from `forge/forge-gui/res`, the others need nothing on disk).
+The **Java harness-half** is primarily checked at compile time: `gen-harness-prompts.mjs` generates typed Java prompt classes from the protocol, and the harness builds every prompt from them — so a protocol change the harness no longer matches fails `yarn build:harness`. After Maven succeeds, `harness.mjs` also runs the regression executables compiled under `forge-harness/src/test/java` (plain `main` methods, run from the repo root; `ActionSpaceTest`, `HarnessPlayPlumbingTest` and `ManaBrewInteractiveControllerTest` boot the card database from `forge/forge-gui/res`, `JournalRewindTest` starts two `--interactive-server` processes on its own classpath, the others need nothing on disk).
 
 Docker images that build the harness directly must perform the same generation step before Maven runs. The generated `forge.harness.protocol.*` sources are gitignored, so any Dockerfile that copies `forge-harness/` and invokes `mvn -pl forge-harness ...` without first running `gen-protocol` + `gen-harness-prompts.mjs` will fail with missing classes such as `ChooseCardsInput` or `CardDto`.
 
@@ -77,4 +77,4 @@ Never use `--no-verify` to bypass the commit-msg or pre-commit hooks. If a hook 
 
 `parity-repair-agent.py` requires `PARITY_AUTH` in the environment as `username:password`. Supply it through local secrets or CI secrets. The previously committed dashboard credential must be rotated because it remains in Git history.
 
-Forge journal/rewind regression scripts live in `scripts/forge-tests/`; commands and runtime requirements are listed in `docs/DECISION_REPLAY.md`.
+The Forge rewind regression script lives in `scripts/forge-tests/`; commands and runtime requirements are listed in `docs/DECISION_REPLAY.md`.
