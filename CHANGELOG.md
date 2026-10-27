@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.65.2](https://github.com/witchesofthehill/manabrew/compare/v3.65.1...v3.65.2) (2026-10-27)
+
+### Fixes
+
+* **ui:** improve app-wide responsiveness ([#1123](https://github.com/witchesofthehill/manabrew/issues/1123)) ([178dda1](https://github.com/witchesofthehill/manabrew/commit/178dda1e6361a76cdcd9a71d9ee71b28ca7613cd))
+
 ## [3.65.1](https://github.com/witchesofthehill/manabrew/compare/v3.65.0...v3.65.1) (2026-10-26)
 
 ### Fixes
