@@ -14,6 +14,7 @@ const typographyProperties = {
 const typographyKeys = Object.keys(typographyProperties) as (keyof typeof typographyProperties)[];
 const typographySizes = { body: 0, label: 0, meta: 0, caption: 0, input: 0, controlHeight: 0 };
 let typographyInitialized = false;
+let touchUi = false;
 
 export function refreshUiTypography(): boolean {
   const style = getComputedStyle(document.documentElement);
@@ -26,6 +27,9 @@ export function refreshUiTypography(): boolean {
       changed = true;
     }
   }
+  const nextTouchUi = typographySizes.controlHeight / rootSize >= 2.75;
+  changed ||= touchUi !== nextTouchUi;
+  touchUi = nextTouchUi;
   typographyInitialized = true;
   return changed;
 }
@@ -38,4 +42,9 @@ export function getUiFontSize(role: UiTextRole): number {
 export function getUiControlHeight(): number {
   if (!typographyInitialized) refreshUiTypography();
   return typographySizes.controlHeight;
+}
+
+export function isTouchUi(): boolean {
+  if (!typographyInitialized) refreshUiTypography();
+  return touchUi;
 }

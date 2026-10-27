@@ -3,7 +3,12 @@
  * Shows the current phase, enabled stops, and supports click-to-toggle.
  */
 
-import { getUiControlHeight, getUiFontSize, UI_FONT_FAMILY as FONT } from "@/themes/typography";
+import {
+  getUiControlHeight,
+  getUiFontSize,
+  isTouchUi,
+  UI_FONT_FAMILY as FONT,
+} from "@/themes/typography";
 import { Container, Graphics, Text, TextStyle, Sprite } from "pixi.js";
 import type { Theme } from "@/hooks/useTheme";
 import { getTheme } from "@/hooks/useTheme";
@@ -564,7 +569,7 @@ export class PhaseStripLayer {
     const availableWidth = Math.max(1, this.canvasWidth - 16);
     const combatWidth = Math.min(this.combatCellW, availableWidth);
 
-    const indicatorWidth = !this.compact && getUiControlHeight() >= 44 ? 32 : getUiControlHeight();
+    const indicatorWidth = isTouchUi() ? (this.compact ? getUiControlHeight() : 32) : 0;
     const cellWidth = Math.max(
       CELL_W,
       state.opponents.length * indicatorWidth +
