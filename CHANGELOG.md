@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.65.1](https://github.com/witchesofthehill/manabrew/compare/v3.65.0...v3.65.1) (2026-10-26)
+
+### Fixes
+
+* actionspace manarocks ([#1124](https://github.com/witchesofthehill/manabrew/issues/1124)) ([ca67bf2](https://github.com/witchesofthehill/manabrew/commit/ca67bf2a668f4e2486bb646859da763f72d1b559))
+
+## [3.65.0](https://github.com/witchesofthehill/manabrew/compare/v3.64.9...v3.65.0) (2026-10-25)
+
+### Features
+
+* **forge:** add decision replay and snapshot restoration ([15a4afd](https://github.com/witchesofthehill/manabrew/commit/15a4afd390e809584787720ea6001f66d442adf7))
+* **forge:** replace snapshots with journal history and rewind ([f1a65c8](https://github.com/witchesofthehill/manabrew/commit/f1a65c82d5487623f2c723bf617a42499fad5a6d))
+* **forge:** journal history and verified rewind across runtimes ([#1081](https://github.com/witchesofthehill/manabrew/issues/1081)) ([c48dce6](https://github.com/witchesofthehill/manabrew/commit/c48dce63b4785692f2be1fe2814b8de31260f220))
+
+### Fixes
+
+* **forge:** harden journal replay and rewind lifecycle ([3281760](https://github.com/witchesofthehill/manabrew/commit/3281760c63e3a7058f53254d31e700a28ed75d25))
+* ui ([c1cc4ed](https://github.com/witchesofthehill/manabrew/commit/c1cc4edcbbc86e571de9cfe2a6830beddea52884))
+
+### Performance
+
+* **forge:** defer replay UI snapshots until verification ([bed06d6](https://github.com/witchesofthehill/manabrew/commit/bed06d6cca6bc7feddc312e2de0cb027c81c5940))
+
+## [3.64.9](https://github.com/witchesofthehill/manabrew/compare/v3.64.8...v3.64.9) (2026-10-25)
+
+### Fixes
+
+* **ui:** correct foldable layouts ([#1112](https://github.com/witchesofthehill/manabrew/issues/1112)) ([c88786b](https://github.com/witchesofthehill/manabrew/commit/c88786b1c510527c59ec6a8bf5fcea090df89647))
+
 ## [3.64.8](https://github.com/witchesofthehill/manabrew/compare/v3.64.7...v3.64.8) (2026-10-24)
 
 ### Fixes

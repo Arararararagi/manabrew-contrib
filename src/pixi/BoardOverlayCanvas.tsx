@@ -660,6 +660,7 @@ export function BoardOverlayCanvasSurface({
           }
 
           promptLayer?.update(deltaMs);
+          currentScene?.setActionPanelBounds(promptLayer?.getActionPanelBounds() ?? null);
 
           const definitions = currentScene?.getArrowDefs() ?? [];
           arrow?.update(definitions, deltaMs);
