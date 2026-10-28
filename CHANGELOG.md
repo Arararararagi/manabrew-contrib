@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.67.2](https://github.com/witchesofthehill/manabrew/compare/v3.67.1...v3.67.2) (2026-10-28)
+
+### Fixes
+
+* many audit fixes ([#1145](https://github.com/witchesofthehill/manabrew/issues/1145)) ([5ec73a7](https://github.com/witchesofthehill/manabrew/commit/5ec73a78c703ff867640ff6144260399f15b14b6))
+
 ## [3.67.1](https://github.com/witchesofthehill/manabrew/compare/v3.67.0...v3.67.1) (2026-10-28)
 
 ### Fixes
