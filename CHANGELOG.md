@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.67.0](https://github.com/witchesofthehill/manabrew/compare/v3.66.1...v3.67.0) (2026-10-28)
+
+### Features
+
+* brewies ([#1143](https://github.com/witchesofthehill/manabrew/issues/1143)) ([101d3c4](https://github.com/witchesofthehill/manabrew/commit/101d3c47cf03b392dfbe98491cea55e633808f8b))
+
 ## [3.66.1](https://github.com/witchesofthehill/manabrew/compare/v3.66.0...v3.66.1) (2026-10-28)
 
 ### Fixes
