@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.66.1](https://github.com/witchesofthehill/manabrew/compare/v3.66.0...v3.66.1) (2026-10-28)
+
+### Fixes
+
+* desktop scaling ([#1138](https://github.com/witchesofthehill/manabrew/issues/1138)) ([32067ad](https://github.com/witchesofthehill/manabrew/commit/32067ad7aa09fda186fab355b6ce36c03d09fb77))
+
 ## [3.66.0](https://github.com/witchesofthehill/manabrew/compare/v3.65.4...v3.66.0) (2026-10-28)
 
 ### Features
