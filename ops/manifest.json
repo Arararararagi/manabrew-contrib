@@ -1,5 +1,5 @@
 {
-  "version": 282,
+  "version": 283,
   "packages": {
     "forge-card-script": "0.1.3",
     "forge-card-script-lsp": "0.1.3",
@@ -14,7 +14,7 @@
     "manabrew-art-cache": "0.3.0",
     "manabrew-engine": "0.12.2",
     "manabrew-engine-macros": "0.2.0",
-    "manabrew-hub": "0.22.5",
+    "manabrew-hub": "0.22.6",
     "manabrew-lan-discovery": "0.2.1",
     "manabrew-protocol": "6.1.0",
     "manabrew-relay-protocol": "6.0.1",
