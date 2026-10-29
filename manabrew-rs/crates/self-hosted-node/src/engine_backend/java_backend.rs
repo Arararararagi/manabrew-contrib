@@ -32,8 +32,9 @@ use manabrew_agent_interface::game_view_dto::GameViewDto;
 use manabrew_agent_interface::prompt::{AgentMessage, ClientToServerMessage};
 #[cfg(forge_backend)]
 use manabrew_agent_interface::prompt::{
-    AgentPrompt, ChooseActionOutput, DiceRolledOutput, DirectiveInput, GameOverInput, PromptInput,
-    PromptOutput, ProtocolError, ProtocolErrorCode, ResponseViolation, StateUpdate,
+    AgentPrompt, ChooseActionOutput, DiceRolledOutput, DirectiveInput, EngineDirective,
+    GameOverInput, PromptInput, PromptOutput, ProtocolError, ProtocolErrorCode, ResponseViolation,
+    StateUpdate,
 };
 #[cfg(feature = "java-forge")]
 use manabrew_agent_interface::prompt::{MulliganOutput, MulliganPutBackOutput};
@@ -536,6 +537,14 @@ impl JavaEngineHandle {
             .lock()
             .map_err(|_| "java subprocess mutex poisoned".to_string())?;
         guard.drain_checkpoint_metrics(session_id)
+    }
+
+    pub fn drain_directives(&self, session_id: &str) -> Result<String, String> {
+        let bridge = self.bridge_for(session_id)?;
+        let mut guard = bridge
+            .lock()
+            .map_err(|_| "java subprocess mutex poisoned".to_string())?;
+        guard.drain_directives(session_id)
     }
 
     pub fn state_revision(&self, session_id: &str) -> Result<u64, String> {
@@ -1478,6 +1487,24 @@ fn prompt_input_name(input: &PromptInput) -> String {
 }
 
 #[cfg(forge_backend)]
+fn drain_engine_directives(
+    engine: &ForgeEngine,
+    session_id: &str,
+) -> Result<Vec<(usize, EngineDirective)>, String> {
+    #[derive(serde::Deserialize)]
+    struct Drained {
+        seat: usize,
+        directive: EngineDirective,
+    }
+    let drained: Vec<Drained> = serde_json::from_str(&engine.drain_directives(session_id)?)
+        .map_err(|err| format!("failed to parse java directives: {err}"))?;
+    Ok(drained
+        .into_iter()
+        .map(|entry| (entry.seat, entry.directive))
+        .collect())
+}
+
+#[cfg(forge_backend)]
 fn report_checkpoint_metrics(
     engine: &ForgeEngine,
     session_id: &str,
@@ -1738,6 +1765,15 @@ fn run_hosted_engine_game_inner(
                 }
             }
             send_observer_state(&engine, &session_id, &remote_prompt_tx);
+        }
+
+        for (seat, directive) in drain_engine_directives(&engine, &session_id)? {
+            if remote_prompt_tx
+                .send((seat, AgentMessage::Directive(directive)))
+                .is_err()
+            {
+                return Ok(());
+            }
         }
 
         if let Some(target_prompt) = engine.rewind_if_requested(&session_id, &cancel)? {
@@ -2607,6 +2643,7 @@ pub trait JavaBridge {
     fn get_snapshot(&mut self, session_id: &str, viewer: Option<usize>) -> Result<String, String>;
     fn is_game_over(&mut self, session_id: &str) -> Result<bool, String>;
     fn drain_checkpoint_metrics(&mut self, session_id: &str) -> Result<String, String>;
+    fn drain_directives(&mut self, session_id: &str) -> Result<String, String>;
     fn state_revision(&mut self, session_id: &str) -> Result<u64, String>;
     fn end_game(&mut self, session_id: &str) -> Result<(), String>;
     fn abort_game(&mut self, session_id: &str) -> Result<(), String>;
@@ -2708,6 +2745,10 @@ impl JavaBridge for UnavailableJavaBridge {
     }
 
     fn drain_checkpoint_metrics(&mut self, _session_id: &str) -> Result<String, String> {
+        Err(unsupported_message().to_string())
+    }
+
+    fn drain_directives(&mut self, _session_id: &str) -> Result<String, String> {
         Err(unsupported_message().to_string())
     }
 
@@ -3018,6 +3059,11 @@ impl JavaBridge for SubprocessBridge {
 
     fn drain_checkpoint_metrics(&mut self, session_id: &str) -> Result<String, String> {
         let body = json!({ "command": "drainCheckpointMetrics", "sessionId": session_id });
+        self.call(&body.to_string())
+    }
+
+    fn drain_directives(&mut self, session_id: &str) -> Result<String, String> {
+        let body = json!({ "command": "drainDirectives", "sessionId": session_id });
         self.call(&body.to_string())
     }
 
