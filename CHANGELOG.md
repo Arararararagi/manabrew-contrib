@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.68.0](https://github.com/witchesofthehill/manabrew/compare/v3.67.2...v3.68.0) (2026-10-29)
+
+### Features
+
+* record + repeat ([#1061](https://github.com/witchesofthehill/manabrew/issues/1061)) ([8b33025](https://github.com/witchesofthehill/manabrew/commit/8b33025765914991e7a8b58254b8cfc64d64318a))
+
 ## [3.67.2](https://github.com/witchesofthehill/manabrew/compare/v3.67.1...v3.67.2) (2026-10-28)
 
 ### Fixes
