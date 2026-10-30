@@ -1,8 +1,13 @@
-import type { Prompt, PromptOutput, ProtocolError } from "@/protocol";
+import type {
+  Prompt,
+  PromptOutput,
+  ProtocolError,
+  RecordingStatus,
+  RepeatVoteDto,
+} from "@/protocol";
 import type { DisplayEvent } from "@/protocol/display";
 import type { CardDto, GameViewDto, PlayerDto } from "@/protocol/game";
 import type { Deck } from "@/protocol/deck";
-import type { GameLogEntry } from "@/types/gameLog";
 import type { EngineKind, GameFormat } from "@/types/server";
 import type { IronsmithDeckIssue } from "@/game";
 
@@ -56,9 +61,9 @@ export interface DeferredSnapshot {
 export interface GameState {
   gameView: ClientGameView | null;
   currentPrompt: Prompt | null;
-  gameLog: GameLogEntry[];
   protocolError: ProtocolError | null;
   isGameActive: boolean;
+  activeEngine: EngineKind | null;
   debugInfo: string;
   /** Set when the host engine fails fatally (crash / invalid deck / can't
    *  start). The game view shows this instead of hanging on the loading
@@ -84,6 +89,8 @@ export interface GameState {
   /** Optimistic: true from when the local player passes/declines a decision until the next prompt
    *  for them arrives. Lets the UI reflect "waiting for others" instantly, without the state lag. */
   relinquishedPriority: boolean;
+  recording: RecordingStatus;
+  repeatVote: RepeatVoteDto | null;
   gameConfig: GameConfig | null;
   gauntletId: string | null;
   /** Set at concede click, before the engine confirms via `status: "conceded"`. */
@@ -138,5 +145,8 @@ export interface GameState {
   ) => void;
   requestRestore: (checkpointId: number) => Promise<void>;
   voteRestore: (voteId: number, accept: boolean) => Promise<void>;
-  setSnapshotRecording: (enabled: boolean) => Promise<void>;
+  startRecording: () => Promise<void>;
+  stopRecording: () => Promise<void>;
+  requestRepeat: (iterations: number) => Promise<void>;
+  voteRepeat: (voteId: number, accept: boolean) => Promise<void>;
 }
