@@ -6,7 +6,7 @@ import type {
   ClientGameView,
   ClientPlayerDto,
 } from "./gameStore.types";
-import type { Prompt, ProtocolError } from "@/protocol";
+import type { EngineDirective, Prompt, ProtocolError } from "@/protocol";
 import type { DisplayEvent } from "@/protocol/display";
 import type { GameViewDto, ZoneDto, ZoneKind } from "@/protocol/game";
 import { isPromptLoggingEnabled } from "@/lib/debugPrompts";
@@ -104,6 +104,7 @@ function normalizeGameView(
       ? incoming.checkpoints
       : (current?.checkpoints ?? []),
     snapshotRecording: incoming.snapshotRecording ?? current?.snapshotRecording ?? false,
+    decisionHistory: incoming.decisionHistory ?? current?.decisionHistory,
     restoreVote: Array.isArray(incoming.checkpoints)
       ? (incoming.restoreVote ?? null)
       : (current?.restoreVote ?? null),
@@ -154,6 +155,19 @@ export function applyState(
   set: (partial: Partial<GameState>) => void,
   get: () => GameState,
 ) {
+  const previousVote = get().gameView?.restoreVote;
+  const vote = gameView.restoreVote;
+  if (
+    gameView.decisionHistory &&
+    vote?.status.type === "approved" &&
+    (previousVote?.voteId !== vote.voteId || previousVote?.status.type !== "approved")
+  ) {
+    set({
+      currentPrompt: null,
+      isWaitingForResponse: false,
+      relinquishedPriority: false,
+    });
+  }
   route(
     { displayEvents: [], gameView: normalizeGameView(gameView, get().gameView), prompt: null },
     `${source}: state`,
@@ -180,6 +194,20 @@ export function applyProtocolError(
 ) {
   console.warn(`[protocol-error:${source}]`, error.code, error.promptId, error.message);
   set({ protocolError: error, isWaitingForResponse: false, relinquishedPriority: false });
+}
+
+export function applyEngineDirective(
+  directive: EngineDirective,
+  set: (partial: Partial<GameState>) => void,
+) {
+  switch (directive.type) {
+    case "recording":
+      set({ recording: directive.status });
+      break;
+    case "repeatVote":
+      set({ repeatVote: directive.vote });
+      break;
+  }
 }
 
 // A pure call-to-action: it carries no game view (state arrives via applyState).
